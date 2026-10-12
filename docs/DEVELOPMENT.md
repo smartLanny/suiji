@@ -11,7 +11,7 @@ open Suiji.xcodeproj
 
 生成器扫描 `Sources/SuijiCore`、`Shared`、`iOS`、`Watch` 各目录直接下的 `.swift`，重写 project、共享 schemes 和 Info.plist，并将 Watch App 嵌入手机 App。新增嵌套目录或能力时要同步修改生成器。需要长期保留的工程设置应写入生成器，不只手改生成结果。
 
-**每次重新生成签名工程都传相同 `--team`。** 省略参数会清空两端的 DEVELOPMENT_TEAM。不要把个人 Team ID、证书、UDID、邮箱或 API Key 写进共享文档；本地值自行替换。无签名编译可省略 Team。
+公开仓库的 DEVELOPMENT_TEAM 留空。可以本地用 `--team` 生成签名设置，但不要提交个人 Team 的工程差异；临时构建也可给 `xcodebuild` 传 `DEVELOPMENT_TEAM=<YOUR_TEAM_ID>`，同时作用于手机和 Watch。不要把证书、UDID、个人邮箱或 API Key 写进共享文档。
 
 ## 验证命令
 
@@ -38,7 +38,9 @@ xcodebuild -project Suiji.xcodeproj -scheme SuijiWatch \
 1. 在 Xcode 登录自己的 Apple Developer 账号；生成工程时传入自己的 Team，检查两个 target 的自动签名。连接并选择 iPhone，按系统提示开启开发者模式和信任，运行 `Suiji`。
 2. 允许麦克风，点「说一句」，点「停止并保存」后直接返回并保存，无第二个完成确认。进入记录回听；不要把启动成功当作音频保存成功。
 3. 手机设置填写服务地址和模型，按服务要求输入 Key；无需 Key 的网关可留空。真实上传应由用户主动配置服务，测试不使用个人 Key。Key 仅进手机 Keychain。
-4. 在配对 Watch 安装并运行 `SuijiWatch`，验证录音、断连排队、手机保存及回执。Watch App 已嵌入手机产物，尚未证明配对设备安装与传输成功。
+4. iPhone 的 Watch App →「我的手表」→ 向下找到「可用 App」→「随记」→「安装」（新版系统可能归于 App 分组）。保持手表与手机已配对、联网且靠近。最新版手机产物已嵌入 Watch App；本工程要求 watchOS 27。见 [Apple 安装说明](https://support.apple.com/en-us/109023)。
+5. 如果列表中没有随记或安装失败，在 Xcode Device Hub 中确认配对手表已可用；选择 `SuijiWatch` scheme 和该实体 Watch，再运行。需要先处理 Apple 提示的手表开发者模式、设备注册及签名；不要用仅手机安装成功推断 Watch 已安装。见 [Xcode 配对说明](https://developer.apple.com/documentation/xcode/pairing-your-devices-with-your-mac)。
+6. Watch 安装后验证录音、断连排队、手机保存及回执。2026-10-13 的 Mac 设备列表尚未出现 S9，配对 Watch 实际运行与传输仍待验收。
 
 Personal Team 属于个人设备测试方式，免费签名配置有效期为 7 天，过期需重新构建安装；见 [Apple 账号能力说明](https://developer.apple.com/help/account/basics/about-your-developer-account)。当前流程不等于 TestFlight / App Store 发布。
 
@@ -62,7 +64,7 @@ xcodebuild -project Suiji.xcodeproj -scheme Suiji \
 
 ### 提交与自动检查
 
-私有仓库为 [smartLanny/suiji](https://github.com/smartLanny/suiji)。只提交源码、资源、生成脚本及可维护文档，不提交设备容器、录音、manifest、凭据或签名材料。提交前记录相关测试与真机证据；在 [验收表](ACCEPTANCE.md) 更新结果，保持「已实现」「已编译」「已真机验证」分别可查。
+仓库为 [smartLanny/suiji](https://github.com/smartLanny/suiji)。只提交源码、资源、生成脚本及可维护文档，不提交设备容器、录音、manifest、凭据或签名材料。提交前记录相关测试与真机证据；在 [验收表](ACCEPTANCE.md) 更新结果，保持「已实现」「已编译」「已真机验证」分别可查。
 
 GitHub Actions 在 push / pull request 后运行纯核心 SwiftPM 测试；iOS 27 / watchOS 27 App 的编译和界面验收仍在具备相应 SDK 的本机执行。
 

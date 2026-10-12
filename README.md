@@ -2,7 +2,11 @@
 
 原生 SwiftUI iPhone / Apple Watch 客户端，第一阶段实现主动录音 → 本地保存 → 手表同步手机 → 可替换的 OpenAI 兼容转写。原型里的提醒事项、Obsidian、健康、周/月回顾和 Agent 执行将在后续接入，当前原生 App 不显示模拟结果。
 
-[私有 GitHub 仓库](https://github.com/smartLanny/suiji) · [开发安装](docs/DEVELOPMENT.md) · [设计规范](docs/DESIGN.md) · [架构](docs/ARCHITECTURE.md) · [验收记录](docs/ACCEPTANCE.md) · [路线图](docs/ROADMAP.md)
+[GitHub 仓库](https://github.com/smartLanny/suiji) · [开发安装](docs/DEVELOPMENT.md) · [设计规范](docs/DESIGN.md) · [架构](docs/ARCHITECTURE.md) · [验收记录](docs/ACCEPTANCE.md) · [路线图](docs/ROADMAP.md)
+
+## 开源许可
+
+项目代码采用 [MIT License](LICENSE)。内置 Noto Serif SC 字体单独采用 [SIL Open Font License 1.1](Resources/Fonts/OFL.txt)，保留其原始版权和授权文件。角色与截图来源见 [素材说明](docs/ASSET_PROVENANCE.md)。
 
 ## 使用
 
