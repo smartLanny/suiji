@@ -47,6 +47,163 @@ final class RecordingStoreTests: XCTestCase {
         XCTAssertTrue(store.all().isEmpty)
     }
 
+    func testJournalIntentSurvivesEnvelopeAndPhoneImport() throws {
+        let draft = try store.begin(source: .watch, intent: .journal)
+        let audioURL = store.audioURL(for: draft)
+        try Data(repeating: 7, count: 12).write(to: audioURL)
+        let saved = try store.finish(id: draft.id, duration: 8)
+        let envelopeData = try JSONEncoder().encode(ClipEnvelope(recording: saved))
+        let envelope = try JSONDecoder().decode(ClipEnvelope.self, from: envelopeData)
+        let phoneStore = try RecordingStore(root: directory.appendingPathComponent("phone", isDirectory: true))
+
+        let imported = try phoneStore.importClip(from: audioURL, envelope: envelope)
+
+        XCTAssertEqual(envelope.intent, .journal)
+        XCTAssertEqual(imported.intent, .journal)
+        XCTAssertEqual(imported.title, "一段日记")
+    }
+
+    func testContinuousModeAndMarkersSurviveRestartAndEnvelopeImport() throws {
+        let draft = try store.begin(source: .watch, mode: .continuous)
+        let audioURL = store.audioURL(for: draft)
+        try Data(repeating: 7, count: 12).write(to: audioURL)
+        let note = RecordingMarker(id: UUID(), offset: 2.5, intent: .note)
+        let journal = RecordingMarker(id: UUID(), offset: 7.25, intent: .journal)
+        try store.addMarker(id: draft.id, marker: note)
+        try store.addMarker(id: draft.id, marker: journal)
+
+        let reopened = try RecordingStore(root: directory)
+        XCTAssertEqual(reopened.recording(id: draft.id)?.mode, .continuous)
+        XCTAssertEqual(reopened.recording(id: draft.id)?.markers, [note, journal])
+        let saved = try reopened.finish(id: draft.id, duration: 8)
+        let encoded = try JSONEncoder().encode(ClipEnvelope(recording: saved))
+        let envelope = try JSONDecoder().decode(ClipEnvelope.self, from: encoded)
+        let phoneStore = try RecordingStore(root: directory.appendingPathComponent("phone", isDirectory: true))
+
+        let imported = try phoneStore.importClip(from: audioURL, envelope: envelope)
+
+        XCTAssertEqual(envelope.mode, .continuous)
+        XCTAssertEqual(envelope.markers, [note, journal])
+        XCTAssertEqual(imported.mode, .continuous)
+        XCTAssertEqual(imported.markers, [note, journal])
+    }
+
+    func testMarkersRejectInvalidOffsetsAndCompletedRecordings() throws {
+        let draft = try store.begin(source: .phone, mode: .continuous)
+        try Data(repeating: 8, count: 12).write(to: store.audioURL(for: draft))
+        XCTAssertThrowsError(try store.addMarker(id: draft.id,
+                                                  marker: RecordingMarker(id: UUID(), offset: .nan, intent: .note))) { error in
+            XCTAssertEqual(error as? StoreError, .invalidMarker)
+        }
+        XCTAssertThrowsError(try store.addMarker(id: draft.id,
+                                                  marker: RecordingMarker(id: UUID(), offset: -.infinity, intent: .note))) { error in
+            XCTAssertEqual(error as? StoreError, .invalidMarker)
+        }
+
+        let marker = RecordingMarker(id: UUID(), offset: 3, intent: .journal)
+        try store.addMarker(id: draft.id, marker: marker)
+        let saved = try store.finish(id: draft.id, duration: 8)
+        XCTAssertThrowsError(try store.addMarker(id: saved.id,
+                                                  marker: RecordingMarker(id: UUID(), offset: 4, intent: .note))) { error in
+            XCTAssertEqual(error as? StoreError, .recordingNotActive)
+        }
+        XCTAssertEqual(store.recording(id: saved.id)?.markers, [marker])
+    }
+
+    func testLegacyManifestAndEnvelopeDefaultMissingIntentToNote() throws {
+        let oldRecording = fixture()
+        var oldRecordingJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(oldRecording)) as? [String: Any])
+        oldRecordingJSON.removeValue(forKey: "intent")
+        oldRecordingJSON.removeValue(forKey: "mode")
+        oldRecordingJSON.removeValue(forKey: "markers")
+        let oldManifest = try JSONSerialization.data(withJSONObject: ["version": 1, "recordings": [oldRecordingJSON]], options: [.sortedKeys])
+        try oldManifest.write(to: directory.appendingPathComponent("recordings.json"))
+
+        let reopened = try RecordingStore(root: directory)
+        XCTAssertEqual(reopened.recording(id: oldRecording.id)?.intent, .note)
+        XCTAssertEqual(reopened.recording(id: oldRecording.id)?.mode, .quick)
+        XCTAssertEqual(reopened.recording(id: oldRecording.id)?.markers, [])
+
+        let oldClip = fixture()
+        var oldEnvelopeJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(ClipEnvelope(recording: oldClip))) as? [String: Any])
+        oldEnvelopeJSON.removeValue(forKey: "intent")
+        oldEnvelopeJSON.removeValue(forKey: "mode")
+        oldEnvelopeJSON.removeValue(forKey: "markers")
+        let oldEnvelopeData = try JSONSerialization.data(withJSONObject: oldEnvelopeJSON, options: [.sortedKeys])
+        let decoded = try JSONDecoder().decode(ClipEnvelope.self, from: oldEnvelopeData)
+        let transfer = directory.appendingPathComponent("legacy-transfer.m4a")
+        try Data(repeating: 4, count: Int(oldClip.byteCount)).write(to: transfer)
+
+        let imported = try reopened.importClip(from: transfer, envelope: decoded)
+
+        XCTAssertEqual(decoded.intent, .note)
+        XCTAssertEqual(decoded.mode, .quick)
+        XCTAssertEqual(decoded.markers, [])
+        XCTAssertEqual(imported.intent, .note)
+        XCTAssertEqual(imported.mode, .quick)
+        XCTAssertEqual(imported.markers, [])
+    }
+
+    func testDiscardDraftRemovesOnlyUnfinishedCapture() throws {
+        let draft = try store.begin(source: .phone, intent: .journal)
+        let draftURL = store.audioURL(for: draft)
+        try Data(repeating: 3, count: 12).write(to: draftURL)
+        let ready = try makeCapture()
+        let acknowledged = try makeCapture(source: .watch)
+        try store.acknowledge(id: acknowledged.id)
+
+        XCTAssertThrowsError(try store.discardDraft(id: ready.id))
+        XCTAssertThrowsError(try store.discardDraft(id: acknowledged.id))
+        try store.discardDraft(id: draft.id)
+
+        XCTAssertNil(store.recording(id: draft.id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: draftURL.path))
+        XCTAssertEqual(store.recording(id: ready.id), ready)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioURL(for: ready).path))
+        XCTAssertNotNil(store.recording(id: acknowledged.id)?.phoneReceivedAt)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioURL(for: acknowledged).path))
+    }
+
+    func testDraftAudioRemovalFailureKeepsDraftAndSavedAudio() throws {
+        let draft = try store.begin(source: .watch, intent: .journal)
+        let draftURL = store.audioURL(for: draft)
+        try Data(repeating: 5, count: 12).write(to: draftURL)
+        let ready = try makeCapture()
+        let audioDirectory = directory.appendingPathComponent("Audio", isDirectory: true)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: audioDirectory.path) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: audioDirectory.path)
+
+        XCTAssertThrowsError(try store.discardDraft(id: draft.id))
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: audioDirectory.path)
+        XCTAssertEqual(store.recording(id: draft.id)?.captureState, .recording)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: draftURL.path))
+        XCTAssertEqual(store.recording(id: ready.id), ready)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioURL(for: ready).path))
+    }
+
+    func testDraftIndexWriteFailureLeavesRecoverableEmptyDraft() throws {
+        let draft = try store.begin(source: .phone)
+        let draftURL = store.audioURL(for: draft)
+        try Data(repeating: 6, count: 12).write(to: draftURL)
+        let ready = try makeCapture()
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
+
+        XCTAssertThrowsError(try store.discardDraft(id: draft.id))
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+        let emptyDraft = try XCTUnwrap(store.recording(id: draft.id))
+        XCTAssertEqual(emptyDraft.captureState, .recording)
+        XCTAssertEqual(emptyDraft.byteCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: draftURL.path))
+        XCTAssertEqual(store.recording(id: ready.id), ready)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioURL(for: ready).path))
+
+        try store.discardEmptyCapture(id: draft.id)
+        XCTAssertNil(store.recording(id: draft.id))
+    }
+
     func testWatchDoesNotDeleteUntilPhoneAcknowledgesDurableSave() throws {
         let clip = try makeCapture(source: .watch)
         XCTAssertThrowsError(try store.deleteDeliveredWatchAudio(id: clip.id))

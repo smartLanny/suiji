@@ -1,6 +1,6 @@
 # 随记 · 原生 iPhone / Apple Watch
 
-原生 SwiftUI iPhone / Apple Watch 客户端，第一阶段实现主动录音 → 本地保存 → 手表同步手机 → 可替换的 OpenAI 兼容转写。原型里的提醒事项、Obsidian、健康、周/月回顾和 Agent 执行将在后续接入，当前原生 App 不显示模拟结果。
+原生 SwiftUI iPhone / Apple Watch 客户端，第一阶段实现主动口述与分段持续录音 → 本地保存 → 手表同步手机 → 可替换的 OpenAI 兼容转写。Watch 全天模式有独立开关、计时与时间标记，24 小时续航和后台稳定性仍需实测。原型里的提醒事项、Obsidian、健康、周/月回顾和 Agent 执行将在后续接入，当前原生 App 不显示模拟结果。
 
 [GitHub 仓库](https://github.com/smartLanny/suiji) · [开发安装](docs/DEVELOPMENT.md) · [设计规范](docs/DESIGN.md) · [架构](docs/ARCHITECTURE.md) · [验收记录](docs/ACCEPTANCE.md) · [路线图](docs/ROADMAP.md)
 
@@ -52,7 +52,7 @@ xcodebuild -project Suiji.xcodeproj -scheme SuijiWatch -destination 'generic/pla
 
 ## 验证范围
 
-核心 22 项测试已通过，覆盖重启恢复转写队列、重复传输、损坏/不完整文件、回执前保护、30 天清理、永久与手动保留、转写错误和 multipart 请求。它们使用隔离临时文件及模拟 HTTP 响应，不代表真实语音识别准确率或 Watch 无线传输验收。
+核心 29 项测试已通过，覆盖重启恢复转写队列、重复传输、损坏/不完整文件、回执前保护、30 天清理、永久与手动保留、转写错误、multipart 请求、日记/全天模式兼容与标记持久化。它们使用隔离临时文件及模拟 HTTP 响应，不代表真实语音识别准确率或 Watch 无线传输验收。
 
 实际设备安装和测试结果见 [验收记录](docs/ACCEPTANCE.md)。仍需实测：手表与手机断联/重连、锁屏录音、来电中断、5 分钟分段、长时电量和真实后端转写。AirPods 路由及快捷启动入口尚未加入本轮验收。
 

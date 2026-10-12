@@ -62,6 +62,7 @@ struct CompanionVisual: View {
     var level: Float = 0
     var size: CGFloat = 112
     var watchInkMask = false
+    var centered = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -70,13 +71,15 @@ struct CompanionVisual: View {
         listening: Bool = false,
         level: Float = 0,
         size: CGFloat = 112,
-        watchInkMask: Bool = false
+        watchInkMask: Bool = false,
+        centered: Bool = false
     ) {
         self.theme = theme
         self.listening = listening
         self.level = level
         self.size = size
         self.watchInkMask = watchInkMask
+        self.centered = centered
     }
 
     private var spriteColumn: Int {
@@ -86,6 +89,16 @@ struct CompanionVisual: View {
     private var animatedScale: CGFloat {
         guard listening, !reduceMotion else { return 1 }
         return 1 + CGFloat(max(0, min(1, level))) * 0.035
+    }
+
+    // Sprite cells have different transparent margins; align their visible content on Watch.
+    private var contentOffset: CGSize {
+        guard centered else { return .zero }
+        switch theme {
+        case .star: return CGSize(width: listening ? -0.052 : -0.041, height: -0.119)
+        case .ink: return CGSize(width: listening ? -0.019 : -0.054, height: listening ? 0.043 : 0.023)
+        case .sprout: return CGSize(width: listening ? -0.072 : -0.043, height: listening ? 0.145 : 0.124)
+        }
     }
 
     var body: some View {
@@ -103,7 +116,8 @@ struct CompanionVisual: View {
                 }
             }
             .frame(width: tile * 4, height: tile * 3, alignment: .topLeading)
-            .offset(x: -CGFloat(spriteColumn) * tile, y: -CGFloat(theme.spriteRow) * tile)
+            .offset(x: (-CGFloat(spriteColumn) + contentOffset.width) * tile,
+                    y: (-CGFloat(theme.spriteRow) + contentOffset.height) * tile)
         }
         .frame(width: size, height: size)
         .clipped()

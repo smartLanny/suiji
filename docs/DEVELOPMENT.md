@@ -40,7 +40,30 @@ xcodebuild -project Suiji.xcodeproj -scheme SuijiWatch \
 3. 手机设置填写服务地址和模型，按服务要求输入 Key；无需 Key 的网关可留空。真实上传应由用户主动配置服务，测试不使用个人 Key。Key 仅进手机 Keychain。
 4. iPhone 的 Watch App →「我的手表」→ 向下找到「可用 App」→「随记」→「安装」（新版系统可能归于 App 分组）。保持手表与手机已配对、联网且靠近。最新版手机产物已嵌入 Watch App；本工程要求 watchOS 27。见 [Apple 安装说明](https://support.apple.com/en-us/109023)。
 5. 如果列表中没有随记或安装失败，在 Xcode Device Hub 中确认配对手表已可用；选择 `SuijiWatch` scheme 和该实体 Watch，再运行。需要先处理 Apple 提示的手表开发者模式、设备注册及签名；不要用仅手机安装成功推断 Watch 已安装。见 [Xcode 配对说明](https://developer.apple.com/documentation/xcode/pairing-your-devices-with-your-mac)。
-6. Watch 安装后验证录音、断连排队、手机保存及回执。2026-10-13 的 Mac 设备列表尚未出现 S9，配对 Watch 实际运行与传输仍待验收。
+6. 首次安装或更新后先打开手机端随记一次，让手机准备接收；Watch 安装后验证录音、断连排队、手机保存及回执。2026-10-13 已在 S9 / watchOS 27.0 验证首次短录、唯一导入与手机回执；后台多轮稳定性与离线重传仍待验收。
+
+### Watch 安装转圈后回到“安装”
+
+不要仅凭该界面猜测原因。2026-10-13 先后捕获了两种不同失败：
+
+- `0xe8008015`：描述文件不包含目标 Watch。先在手表开启开发者模式，完成对 Mac 的配对/信任；Xcode 发现实体 Watch 后，用 `SuijiWatch` scheme 选择它构建，允许自动注册设备及更新签名。
+- `0xe8008017`：签名资源已被修改。此次增量构建替换了 `embedded.mobileprovision`，却保留旧 Watch 签名。全新 DerivedData 构建消除了本地校验错误，无需修改 App 代码或卸载手机数据。
+
+更新描述文件后，清理构建或使用全新构建目录，验证 Watch 本体、手机中的 Watch 副本及手机包：
+
+```sh
+xcodebuild -project Suiji.xcodeproj -scheme Suiji \
+  -destination 'id=<YOUR_IPHONE_UDID>' \
+  -derivedDataPath /tmp/suiji-paired-build \
+  DEVELOPMENT_TEAM='<YOUR_TEAM_ID>' \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration clean build
+
+codesign --verify --deep --strict /tmp/suiji-paired-build/Build/Products/Debug-watchos/SuijiWatch.app
+codesign --verify --deep --strict /tmp/suiji-paired-build/Build/Products/Debug-iphoneos/Suiji.app/Watch/SuijiWatch.app
+codesign --verify --deep --strict /tmp/suiji-paired-build/Build/Products/Debug-iphoneos/Suiji.app
+```
+
+本次手机 Watch App 的安装入口重试仍未成功，开发工具直接安装同一个干净构建的内嵌 Watch 包成功，随后启动和实际屏幕确认通过。开发期可用 Xcode 的 Watch scheme 运行，或 `xcrun devicectl device install app --device <YOUR_WATCH_UDID> <WATCH_APP_PATH>` 安装。不要将这个结果记为手机端安装入口已修复；后续版本仍需复测该入口。
 
 Personal Team 属于个人设备测试方式，免费签名配置有效期为 7 天，过期需重新构建安装；见 [Apple 账号能力说明](https://developer.apple.com/help/account/basics/about-your-developer-account)。当前流程不等于 TestFlight / App Store 发布。
 

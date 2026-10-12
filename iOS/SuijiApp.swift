@@ -253,7 +253,7 @@ struct TimelineRow: View {
                 .font(.system(size: 12).monospacedDigit()).foregroundStyle(Palette.muted)
                 .frame(width: 43, alignment: .leading).padding(.top, 2)
             VStack(spacing: 8) {
-                Image(systemName: recording.source == .watch ? "applewatch" : "waveform")
+                Image(systemName: recording.intent == .journal ? "book.closed" : recording.source == .watch ? "applewatch" : "waveform")
                     .font(.system(size: 11)).foregroundStyle(theme.color).frame(width: 14, height: 18)
                 Rectangle().fill(Palette.line).frame(width: 0.6)
             }.frame(width: 14)

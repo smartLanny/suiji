@@ -52,3 +52,15 @@ Watch 麦克风 → 手表 Audio/UUID.m4a → transferFile
 - OpenAI 兼容路径不保证服务提供说话人、词级时间戳、长文件、中文质量或特定模型能力；当前只消费文字。真实服务尚未联调。
 
 Key 只在手机设置输入和 Keychain 保存，不进 UserDefaults、Watch 同步或仓库；非秘密配置与留存设置保存在 UserDefaults。
+
+## 记录意图与草稿取消
+
+`Recording.intent` 与 `ClipEnvelope.intent` 支持 `note` / `journal`；旧索引或旧同步消息缺少字段时按 `note` 解码，manifest 保持版本 1。日记类型在每个分段上保留，手机导入时沿用，不依赖转写结果猜测。
+
+`AudioCapture.canDiscardRecording` 仅在快速口述首段尚未提交时成立。`discardCurrentRecording()` 停止录音器，成功时不调用 `onSaved`，通过 store 删除未完成草稿及音频；store 拒绝丢弃 ready 或已回执记录。每 5 分钟已保存的分段仍按原流程同步；存在已提交分段或当前为全天模式时不提供整次撤销，不能把当前段删除伪装成全部取消。
+
+## 全天模式与时间标记
+
+`Recording.mode` / `ClipEnvelope.mode` 区分 `quick` 和 `continuous`，旧数据缺字段时为 `quick`。连续录音仍使用同一录音器及 5 分钟保存/同步链路；界面只在 `AudioCapture.isRecording` 为真时显示正在录制，不根据开关偏好假定后台仍运行。
+
+`RecordingMarker` 包含稳定 ID、当前音频分段内的秒偏移 `offset`、`note` / `journal` 意图。`mark(intent:)` 从当前录音器取得位置，store 写入成功才返回，UI 才显示“已标记”；不触发停止、切段或第二个录音器。标记数组随 envelope 同步，手机详情展示时间；`journal` 标记只是日记起点，尚未生成整理文本或 Obsidian 文件。旧数据缺少标记时按空数组解码。

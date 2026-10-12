@@ -43,105 +43,351 @@ struct WatchHome: View {
     @ObservedObject var model: SessionModel
     @ObservedObject var capture: AudioCapture
     @ObservedObject var companion: CompanionSync
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("watchBotGesturesV1HintSeen") private var hintSeen = false
+    @GestureState private var touching = false
+    @State private var touchStartedAt: Date?
+    @State private var touchTranslation = CGSize.zero
+    @State private var maximumTravel: CGFloat = 0
+    @State private var touchBeganRecording = false
+    @State private var choosingMode = false
+    @State private var holdTask: Task<Void, Never>?
+    @State private var showMore = false
+    @State private var recordingIntent: RecordingIntent = .note
+    @State private var feedback: String?
+    @State private var recordingStoppedUnexpectedly = false
+
+    private let selectionDistance: CGFloat = 42
+    private let cancelDistance: CGFloat = 50
+
+    private var continuous: Bool { capture.isRecording && capture.mode == .continuous }
+    private var selecting: Bool { touching && choosingMode }
+    private var pulling: Bool {
+        touching && touchBeganRecording && !continuous && maximumTravel >= 12
+    }
+    private var cancelIsReady: Bool {
+        capture.canDiscardRecording && touchTranslation.height >= cancelDistance
+            && abs(touchTranslation.width) < 75
+    }
+    private var selection: Int {
+        guard selecting, abs(touchTranslation.height) < 65 else { return 0 }
+        if touchTranslation.width < -selectionDistance { return -1 }
+        if touchTranslation.width > selectionDistance { return 1 }
+        return 0
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(capture.isRecording ? Color(hex: 0xC86D4F) : Color(hex: 0x777770))
-                            .frame(width: 6, height: 6)
-                        Text(capture.isRecording ? "记录中" : "已暂停")
-                            .font(.system(size: 11, weight: .regular))
-                            .foregroundStyle(Palette.muted)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
+            GeometryReader { geometry in
+                VStack(spacing: 3) {
+                    ZStack {
+                        botButton(size: CGSize(width: geometry.size.width, height: max(44, geometry.size.height - 33)))
+                            .highPriorityGesture(touchGesture)
 
-                    CompanionVisual(
-                        theme: model.theme,
-                        listening: capture.isRecording,
-                        level: capture.level,
-                        size: 134,
-                        watchInkMask: true
-                    )
-                    .padding(.top, -4)
-
-                    Text(capture.isStarting ? "准备中" : capture.isRecording ? "正在倾听" : "想到就说")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.top, -13)
-
-                    if capture.isRecording {
-                        Text(durationText(capture.elapsed))
-                            .font(.system(size: 12, weight: .regular, design: .monospaced))
-                            .foregroundStyle(Color(hex: 0xA59B90))
-                            .padding(.top, 3)
-                    }
-
-                    Button {
-                        if capture.isRecording { capture.stop(); model.refresh() }
-                        else { Task { await capture.start(); model.refresh() } }
-                    } label: {
-                        Label(
-                            capture.isStarting ? "准备中…" : capture.isRecording ? "结束并保存" : "开始记录",
-                            systemImage: capture.isRecording ? "stop.fill" : "mic.fill"
-                        )
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 46)
-                        .background(Color(hex: 0x292827), in: Capsule())
-                        .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 18)
-                    .padding(.top, 13)
-                    .disabled(capture.isStarting)
-                    .accessibilityIdentifier("captureButton")
-
-                    Text(capture.isRecording ? "原声正在手表保存" : companion.status)
-                        .font(.system(size: 10, weight: .regular))
-                        .foregroundStyle(Color(hex: 0xA59B90))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .padding(.horizontal, 18)
-                        .padding(.top, 9)
-
-                    NavigationLink { WatchRecordings(model: model) } label: {
-                        HStack(spacing: 5) {
-                            Text("最近记录")
-                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                        if selecting {
+                            HStack {
+                                modeTarget(-1, title: continuous ? "停止" : "随记", icon: continuous ? "stop.fill" : "waveform")
+                                Spacer(minLength: 8)
+                                modeTarget(1, title: continuous ? "日记标记" : "日记", icon: "book.closed")
+                            }
+                            .padding(.horizontal, 8)
+                            .allowsHitTesting(false)
                         }
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(Color(hex: 0xC1B8AD))
-                        .frame(maxWidth: .infinity, minHeight: 34)
+
+                        VStack {
+                            Spacer()
+                            if selecting {
+                                Text(selection == 0 ? "拖向两侧 · 松手取消" : "松手确认")
+                            } else if pulling {
+                                Text(cancelIsReady ? "松手取消" : capture.canDiscardRecording ? "下拉取消 · 拖回继续" : "拖回继续录音")
+                            } else if let feedback {
+                                Text(feedback)
+                            } else if !hintSeen {
+                                Text("轻点记录 · 按住选择")
+                            }
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .padding(.bottom, 2)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.top, 2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+
+                    recordingStatus
+                        .frame(height: 27)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 6)
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
-            .scrollIndicators(.hidden)
-            .background(Color.black)
-            .navigationTitle("随记")
+            .navigationTitle("")
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink { WatchThemePicker(theme: $model.theme) }
-                        label: { Image(systemName: "paintpalette").foregroundStyle(Color(hex: 0xC1B8AD)) }
+                    Button {
+                        if capture.isRecording && !continuous {
+                            if capture.canDiscardRecording { discardRecording() }
+                            else { finishRecording() }
+                        } else { showMore = true }
+                    } label: {
+                        Image(systemName: capture.isRecording && !continuous ? (capture.canDiscardRecording ? "xmark" : "stop.fill") : "ellipsis")
+                    }
+                    .disabled(capture.isStarting || selecting)
+                    .accessibilityLabel(capture.isRecording && !continuous ? (capture.canDiscardRecording ? "取消这次录音" : "停止并保存") : "记录与主题")
                 }
             }
             .containerBackground(Color.black, for: .navigation)
+            .sheet(isPresented: $showMore) {
+                NavigationStack {
+                    List {
+                        if continuous {
+                            Button { showMore = false; markRecording(.journal) } label: {
+                                Label("标记日记起点", systemImage: "book.closed")
+                            }
+                            Button { showMore = false; finishRecording() } label: {
+                                Label("停止全天记录", systemImage: "stop.fill")
+                            }
+                        } else {
+                            Button { showMore = false; beginRecording(.journal) } label: {
+                                Label("记日记", systemImage: "book.closed")
+                            }
+                        }
+                        NavigationLink { WatchRecordings(model: model) } label: {
+                            Label("最近记录", systemImage: "clock")
+                        }
+                        NavigationLink { WatchThemePicker(theme: $model.theme) } label: {
+                            Label("主题", systemImage: "paintpalette")
+                        }
+                    }
+                    .navigationTitle("更多")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button { showMore = false } label: { Image(systemName: "xmark") }
+                                .accessibilityLabel("返回录音")
+                        }
+                    }
+                }
+            }
         }
         .preferredColorScheme(.dark)
+        .onChange(of: selection) { _, value in
+            if value != 0 { WKInterfaceDevice.current().play(.click) }
+        }
+        .onChange(of: cancelIsReady) { _, ready in
+            if ready { WKInterfaceDevice.current().play(.click) }
+        }
+        .onChange(of: touching) { _, active in
+            if !active {
+                DispatchQueue.main.async {
+                    if !touching { resetTouch() }
+                }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { resetTouch() }
+        }
+        .onChange(of: capture.error) { _, error in
+            if error != nil && !capture.isRecording { recordingStoppedUnexpectedly = true }
+        }
+        .onDisappear { resetTouch() }
+        .task {
+            guard !hintSeen else { return }
+            try? await Task.sleep(for: .seconds(5))
+            if !Task.isCancelled { hintSeen = true }
+        }
+        .task(id: feedback) {
+            guard feedback != nil else { return }
+            try? await Task.sleep(for: .seconds(1))
+            if !Task.isCancelled { feedback = nil }
+        }
         .alert("需要留意", isPresented: Binding(get: { capture.error != nil || model.error != nil }, set: { if !$0 { capture.clearError(); model.error = nil } })) {
             Button("知道了", role: .cancel) { capture.clearError(); model.error = nil }
         } message: { Text(capture.error ?? model.error ?? "") }
     }
+
+    private var recordingStatus: some View {
+        Button {
+            if continuous { finishRecording() }
+            else if !capture.isRecording { beginRecording(.note, mode: .continuous) }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: capture.isRecording ? "record.circle.fill" : "record.circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(capture.isRecording ? Color.red : Color.white.opacity(0.55))
+                if capture.isStarting { Text("正在启动…") }
+                else if continuous { Text(durationText(capture.elapsed)).monospacedDigit() }
+                else if capture.isRecording {
+                    Text(recordingIntent == .journal ? "日记" : "随记")
+                    Text(durationText(capture.elapsed)).monospacedDigit()
+                } else { Text(recordingStoppedUnexpectedly ? "已停止" : "全天") }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.65))
+            .padding(.horizontal, 12)
+            .frame(minWidth: 80, maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(capture.isStarting || (capture.isRecording && !continuous))
+        .accessibilityLabel(continuous ? "停止全天记录" : capture.isRecording ? "随记录音计时" : "开启全天记录")
+    }
+
+    private func botButton(size: CGSize) -> some View {
+        Button {
+            if !touching { primaryAction() }
+        } label: {
+            TimelineView(.animation(minimumInterval: 1.0 / 15, paused: scenePhase != .active || reduceMotion)) { context in
+                let moving = scenePhase == .active && !reduceMotion && context.cadence == .live && !touching
+                let time = context.date.timeIntervalSinceReferenceDate
+                let breath = moving ? sin(time * 2 * .pi / 4.2) * 0.035 : 0
+                let drift = moving ? sin(time * 2 * .pi / 5.4) * 2.2 : 0
+                let blinkPhase = time.truncatingRemainder(dividingBy: 5.8)
+                let blink = moving && !capture.isRecording && model.theme == .ink
+                    ? 1 - 0.85 * max(0, 1 - abs(blinkPhase - 5.2) / 0.14) : 1
+                CompanionVisual(theme: model.theme, listening: capture.isRecording, level: capture.level,
+                                size: botTileSize(in: size), watchInkMask: true, centered: true)
+                    .scaleEffect(x: 1 + breath, y: (1 + breath) * blink)
+                    .scaleEffect(selecting ? 0.48 : 1)
+                    .offset(x: selecting ? min(25, max(-25, touchTranslation.width)) : 0,
+                            y: drift + (pulling ? min(25, max(0, touchTranslation.height)) : 0))
+                    .opacity(selecting ? 0.3 : 1)
+            }
+            .frame(width: size.width, height: size.height)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(capture.isStarting)
+        .handGestureShortcut(.primaryAction, isEnabled: !capture.isStarting && !showMore)
+        .accessibilityIdentifier("captureButton")
+        .accessibilityLabel(continuous ? "标记这一刻" : capture.isRecording ? "停止并保存录音" : "开始随记")
+        .accessibilityValue(capture.isRecording ? durationText(capture.elapsed) : "未录音")
+        .accessibilityHint(continuous ? "轻点标记，按住后拖左停止、拖右标记日记起点" : capture.isRecording ? "轻点保存，向下拖动可取消未保存的首段" : "轻点记录，按住后拖向日记，拖回中央松手取消")
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: selecting)
+    }
+
+    private func botTileSize(in size: CGSize) -> CGFloat {
+        let bounds: CGSize
+        switch model.theme {
+        case .star: bounds = CGSize(width: 0.735, height: 0.696)
+        case .ink: bounds = CGSize(width: 0.359, height: 0.196)
+        case .sprout: bounds = CGSize(width: 0.851, height: 0.55)
+        }
+        // Fit visible sprite content, including breathing and meter expansion, inside the Bot area.
+        return max(44, min((size.width - 18) / bounds.width, (size.height - 14) / bounds.height) / 1.075)
+    }
+
+    private func modeTarget(_ side: Int, title: String, icon: String) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: icon).font(.title3)
+                .frame(width: 56, height: 56)
+                .background(selection == side ? model.theme.color : Color(white: 0.18), in: Circle())
+            Text(title).font(.caption2)
+        }
+        .foregroundStyle(.white)
+    }
+
+    private var touchGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .updating($touching) { _, state, _ in state = true }
+            .onChanged { value in
+                if touchStartedAt == nil {
+                    touchStartedAt = value.time
+                    touchBeganRecording = capture.isRecording
+                    maximumTravel = 0
+                    if !capture.isRecording || continuous {
+                        holdTask = Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(400))
+                            guard !Task.isCancelled, touching, maximumTravel < 30 else { return }
+                            choosingMode = true
+                            WKInterfaceDevice.current().play(.click)
+                        }
+                    }
+                }
+                touchTranslation = value.translation
+                maximumTravel = max(maximumTravel, hypot(value.translation.width, value.translation.height))
+                if maximumTravel >= 30 && !choosingMode { holdTask?.cancel() }
+            }
+            .onEnded { value in
+                guard let startedAt = touchStartedAt else { return }
+                let held = value.time.timeIntervalSince(startedAt)
+                let wasChoosing = choosingMode
+                let beganRecording = touchBeganRecording
+                let travel = max(maximumTravel, hypot(value.translation.width, value.translation.height))
+                resetTouch()
+                guard !capture.isStarting, beganRecording == capture.isRecording else { return }
+                if wasChoosing {
+                    guard abs(value.translation.height) < 65 else { return }
+                    if value.translation.width < -selectionDistance {
+                        if continuous { finishRecording() } else { beginRecording(.note) }
+                    } else if value.translation.width > selectionDistance {
+                        if continuous { markRecording(.journal) } else { beginRecording(.journal) }
+                    }
+                } else if travel < 12 && held < 0.4 {
+                    primaryAction()
+                } else if beganRecording && !continuous && capture.canDiscardRecording
+                            && value.translation.height >= cancelDistance && abs(value.translation.width) < 75 {
+                    discardRecording()
+                }
+            }
+    }
+
+    private func resetTouch() {
+        holdTask?.cancel()
+        holdTask = nil
+        touchStartedAt = nil
+        touchTranslation = .zero
+        maximumTravel = 0
+        choosingMode = false
+    }
+
+    private func primaryAction() {
+        guard !capture.isStarting else { return }
+        if continuous { markRecording(.note) }
+        else if capture.isRecording { finishRecording() }
+        else { beginRecording(.note) }
+    }
+
+    private func beginRecording(_ intent: RecordingIntent, mode: RecordingMode = .quick) {
+        guard !capture.isStarting, !capture.isRecording else { return }
+        hintSeen = true
+        feedback = nil
+        recordingStoppedUnexpectedly = false
+        recordingIntent = intent
+        Task {
+            await capture.start(intent: intent, mode: mode)
+            model.refresh()
+            if capture.isRecording { WKInterfaceDevice.current().play(.start) }
+        }
+    }
+
+    private func finishRecording() {
+        capture.stop()
+        model.refresh()
+        if capture.error == nil {
+            feedback = "已保存"
+            WKInterfaceDevice.current().play(.success)
+        }
+    }
+
+    private func markRecording(_ intent: RecordingIntent) {
+        do {
+            _ = try capture.mark(intent: intent)
+            model.refresh()
+            feedback = intent == .journal ? "已标记日记起点" : "已标记"
+            WKInterfaceDevice.current().play(.click)
+        } catch { model.error = error.localizedDescription }
+    }
+
+    private func discardRecording() {
+        do {
+            try capture.discardCurrentRecording()
+            model.refresh()
+            feedback = "已取消"
+            WKInterfaceDevice.current().play(.stop)
+        } catch { model.error = error.localizedDescription }
+    }
+
 }
 
 struct WatchThemePicker: View {
@@ -199,6 +445,10 @@ struct WatchRecordings: View {
             }
             ForEach(model.recordings.filter { $0.captureState != .recording }.prefix(30)) { recording in
                 VStack(alignment: .leading, spacing: 5) {
+                    if recording.intent == .journal {
+                        Label("日记", systemImage: "book.closed")
+                            .font(.caption2).foregroundStyle(model.theme.color)
+                    }
                     Text(recording.recordedAt.formatted(date: .abbreviated, time: .shortened))
                         .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(.white)

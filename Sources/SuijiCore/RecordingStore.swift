@@ -1,7 +1,8 @@
 import Foundation
 
-enum StoreError: LocalizedError {
+enum StoreError: LocalizedError, Equatable {
     case missingRecording, missingAudio, invalidAudio, invalidTranscript, invalidDelivery, invalidManifest
+    case draftNotDiscardable, recordingNotActive, invalidMarker, duplicateMarker
     var errorDescription: String? {
         switch self {
         case .missingRecording: return "找不到这条记录。"
@@ -10,6 +11,10 @@ enum StoreError: LocalizedError {
         case .invalidTranscript: return "没有收到有效转写，原声会继续保留。"
         case .invalidDelivery: return "手机尚未确认保存这段录音。"
         case .invalidManifest: return "记录索引无法读取，原文件已保留。"
+        case .draftNotDiscardable: return "只有尚未完成的本机录音草稿可以丢弃。"
+        case .recordingNotActive: return "只能为正在录制的片段添加标记。"
+        case .invalidMarker: return "标记时间无效。"
+        case .duplicateMarker: return "这条标记已存在。"
         }
     }
 }
@@ -58,14 +63,14 @@ final class RecordingStore: @unchecked Sendable {
         audioDirectory.appendingPathComponent(recording.id.uuidString + ".m4a")
     }
 
-    func begin(source: RecordingSource) throws -> Recording {
+    func begin(source: RecordingSource, intent: RecordingIntent = .note, mode: RecordingMode = .quick) throws -> Recording {
         lock.lock(); defer { lock.unlock() }
         let id = UUID()
         let recording = Recording(id: id, recordedAt: Date(), duration: 0, source: source,
                                   fileName: id.uuidString + ".m4a", byteCount: 0,
                                   captureState: .recording, transcriptionState: .pending,
                                   transcript: nil, lastError: nil, phoneReceivedAt: nil,
-                                  isKept: false, audioDeletedAt: nil)
+                                  isKept: false, audioDeletedAt: nil, intent: intent, mode: mode)
         var next = manifest
         next.recordings.append(recording)
         try commit(next)
@@ -94,6 +99,7 @@ final class RecordingStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard envelope.source == .watch, envelope.duration.isFinite, envelope.duration > 0,
               envelope.byteCount > 0, try sizeOfFile(temporaryURL) == envelope.byteCount else { throw StoreError.invalidAudio }
+        guard envelope.markers.allSatisfy({ $0.offset.isFinite && $0.offset >= 0 }) else { throw StoreError.invalidMarker }
         if let existing = recording(id: envelope.id) {
             guard existing.source == envelope.source, existing.byteCount == envelope.byteCount else { throw StoreError.invalidAudio }
             if existing.audioDeletedAt != nil || FileManager.default.fileExists(atPath: audioURL(for: existing).path) {
@@ -103,7 +109,8 @@ final class RecordingStore: @unchecked Sendable {
         let recording = Recording(id: envelope.id, recordedAt: envelope.recordedAt, duration: envelope.duration,
                                   source: envelope.source, fileName: envelope.fileName, byteCount: envelope.byteCount,
                                   captureState: .ready, transcriptionState: .pending, transcript: nil,
-                                  lastError: nil, phoneReceivedAt: Date(), isKept: false, audioDeletedAt: nil)
+                                  lastError: nil, phoneReceivedAt: Date(), isKept: false, audioDeletedAt: nil,
+                                  intent: envelope.intent, mode: envelope.mode, markers: envelope.markers)
         let destination = audioURL(for: recording)
         // An interrupted import may have copied the file before committing the manifest.
         if !FileManager.default.fileExists(atPath: destination.path) {
@@ -139,6 +146,17 @@ final class RecordingStore: @unchecked Sendable {
         try update(id: id) { $0.lastError = message }
     }
 
+    func addMarker(id: UUID, marker: RecordingMarker) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard marker.offset.isFinite, marker.offset >= 0 else { throw StoreError.invalidMarker }
+        guard let index = manifest.recordings.firstIndex(where: { $0.id == id }) else { throw StoreError.missingRecording }
+        guard manifest.recordings[index].captureState == .recording else { throw StoreError.recordingNotActive }
+        guard !manifest.recordings[index].markers.contains(where: { $0.id == marker.id }) else { throw StoreError.duplicateMarker }
+        var next = manifest
+        next.recordings[index].markers.append(marker)
+        try commit(next)
+    }
+
     func discardEmptyCapture(id: UUID) throws {
         lock.lock(); defer { lock.unlock() }
         guard let recording = recording(id: id), recording.captureState == .recording else { return }
@@ -149,6 +167,20 @@ final class RecordingStore: @unchecked Sendable {
         next.recordings.removeAll { $0.id == id }
         try commit(next)
         if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+    }
+
+    func discardDraft(id: UUID) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard let recording = recording(id: id) else { throw StoreError.missingRecording }
+        guard recording.captureState == .recording,
+              recording.phoneReceivedAt == nil,
+              recording.audioDeletedAt == nil else { throw StoreError.draftNotDiscardable }
+
+        let url = audioURL(for: recording)
+        if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+        var next = manifest
+        next.recordings.removeAll { $0.id == id }
+        try commit(next)
     }
 
     func setTranscribing(id: UUID) throws {

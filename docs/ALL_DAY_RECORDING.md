@@ -1,6 +1,6 @@
 # 全天记录、本人声纹与 Watch 交互
 
-2026-10-13。状态：设计方案，尚未实现声纹、重点标记或自定义双指互点。当前原生功能及实测边界见 [验收记录](ACCEPTANCE.md)。
+2026-10-13。状态：声纹仍为设计方案；全天模式开关、计时和时间标记已实现，手势与长时运行真机验收单独记录。当前原生功能及实测边界见 [验收记录](ACCEPTANCE.md)。
 
 ## 目标与分工
 
@@ -37,7 +37,7 @@
 
 ## 从 Auday 借鉴的体验
 
-- 官网演示使用轻点开始、录制中轻点标记、按住停止；我们可以借鉴“保留重点时刻而不打断记录”的思路。[Auday 官网](https://auday.ai/)
+- 官网演示使用轻点开始、录制中轻点标记、长按 1 秒停止、上下滑动切页；我们可以借鉴“保留重点时刻而不打断记录”的思路。这些是触屏交互，未找到其支持系统双指互点或自定义握拳的官方说明。[Auday 官网](https://auday.ai/)
 - FAQ 明确目前不识别或区分说话人。它的全天录音也受电量、存储和中断影响；不能把竞品描述当成 S9 的 24 小时续航证明。[Auday FAQ](https://auday.ai/faq)
 - 回顾应能回到原文与原声；人工重点标记用于提升附近内容的处理优先级，不等同于用户已发出任务指令。[Auday FAQ](https://auday.ai/faq)
 
@@ -49,10 +49,14 @@
 | --- | --- | --- |
 | 待机 | 开始快速口述 | 首次权限后直接进入倾听 |
 | 快速口述 | 停止并保存 | 轻触反馈、自动返回，无额外完成按钮 |
-| 全天记录 | 标记这一刻 | 一次轻触反馈，继续记录；单独的停止控件，支持长按 |
+| 全天记录 | 标记这一刻 | 持久化成功后轻触反馈，继续记录；底部状态按钮停止，或按住向左拖停止 |
 
 “快速口述”和“全天记录”必须有清楚的当前模式，录制中不偷偷改变按钮意义。重点标记绑定时间，不要求用户此时填写标题。手势只是按钮的快捷方式，按钮仍保留。
 
-S9 支持系统双指轻点两次，SwiftUI 可给一个可见按钮设置 `handGestureShortcut(.primaryAction)`。它不是后台全局手势监听；主按钮宜放在固定区域，避免与 ScrollView 的系统翻页动作竞争。目前工程尚未设置这个修饰器。[Apple API](https://developer.apple.com/documentation/swiftui/handgestureshortcut) · [Apple 手势设计指南](https://developer.apple.com/design/human-interface-guidelines/gestures)
+S9 支持系统双指互点，watchOS 11 起 SwiftUI 可给一个可见按钮设置 `handGestureShortcut(.primaryAction)`，每个 scene 只指定一个主动作。当前 Watch 主按钮已设置该修饰器，开始准备和打开更多页时禁用；点 Bot 与系统双指互点共享当前主动作：快速口述开停、全天记录标记。它不是后台全局手势监听；实际成功率需用户佩戴手表验证。[Apple 双指互点开发说明](https://developer.apple.com/documentation/watchos-apps/enabling-double-tap) · [Apple API](https://developer.apple.com/documentation/swiftui/handgestureshortcut)
+
+未开启全天时，长按后左右拖动用于选择随记/日记，松手提交、中央松手取消；选择前不开麦。日记 intent 随录音和同步 envelope 保存，手机显示日记标识，不等于 Obsidian 已归档。快速口述中下拉可丢弃尚未提交的首段；已经保存的长录分段不能通过该操作撤销。全天录音不提供下拉丢弃；长按右拖只标记日记起点，不另开录音器。更多页保留文字入口，VoiceOver 不依赖拖动。
+
+选题、提醒等类型未来仍优先从口述内容识别，不为每一种分类发明独立手势。长录标记保存当前片段内的实际时间位置，手机详情可查看；失败时显示错误，不显示“已标记”。握拳/双握拳属于 AssistiveTouch 的系统导航能力，不能当作普通 App 已获得任意手势回调。[Apple AssistiveTouch](https://support.apple.com/en-us/111111)
 
 低电量模式、睡眠专注等条件会限制系统双击；腕部轻甩等系统手势不能当作已具备任意自定义映射的入口。必须在 S9 上验证后才列为完成。[双击限制](https://support.apple.com/en-us/108413) · [按钮与手势](https://support.apple.com/en-us/105063)

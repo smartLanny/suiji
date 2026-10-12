@@ -57,6 +57,23 @@ struct RecordingDetail: View {
                             Spacer()
                             Text(durationText(recording.duration)).monospacedDigit()
                         }.font(.subheadline).foregroundStyle(.secondary)
+                        if recording.intent == .journal {
+                            Label("日记", systemImage: "book.closed")
+                                .font(.caption).foregroundStyle(model.theme.color)
+                        }
+                        if recording.mode == .continuous {
+                            Label("全天记录片段", systemImage: "record.circle")
+                                .font(.caption).foregroundStyle(model.theme.color)
+                        }
+                        if !recording.markers.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(recording.markers) { marker in
+                                    Label("\(durationText(marker.offset)) · \(marker.intent == .journal ? "日记起点" : "重点标记")",
+                                          systemImage: marker.intent == .journal ? "book.closed" : "bookmark.fill")
+                                }
+                            }
+                            .font(.subheadline).foregroundStyle(model.theme.color)
+                        }
                         if recording.audioDeletedAt == nil {
                             Button {
                                 do { try playback.toggle(url: model.store.audioURL(for: recording)) }

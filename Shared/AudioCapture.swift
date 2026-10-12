@@ -9,15 +9,18 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var level: Float = 0
     @Published private(set) var error: String?
+    @Published private(set) var mode: RecordingMode = .quick
 
     private let store: RecordingStore
     private let source: RecordingSource
+    private var activeIntent: RecordingIntent = .note
     private let audioSession = AVAudioSession.sharedInstance()
     private var recorder: AVAudioRecorder?
     private var recordingID: UUID?
     private var segmentStart: Date?
     private var lastKnownSegmentDuration: TimeInterval = 0
     private var accumulatedDuration: TimeInterval = 0
+    private var segmentCount = 0
     private var cancelPendingStart = false
     private var meterTimer: Timer?
     private var lastCapacityCheck = Date.distantPast
@@ -40,7 +43,11 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         notificationTokens.forEach(NotificationCenter.default.removeObserver)
     }
 
-    func start() async {
+    var canDiscardRecording: Bool {
+        isRecording && mode == .quick && recordingID != nil && segmentCount == 1 && accumulatedDuration <= 0
+    }
+
+    func start(intent: RecordingIntent = .note, mode: RecordingMode = .quick) async {
         guard !isRecording, !isStarting else { return }
         isStarting = true
         cancelPendingStart = false
@@ -56,7 +63,10 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
             try checkFreeSpace()
             try audioSession.setCategory(.record, mode: .default, options: [])
             try audioSession.setActive(true)
+            activeIntent = intent
+            self.mode = mode
             accumulatedDuration = 0
+            segmentCount = 0
             elapsed = 0
             isRecording = true
             try beginSegment()
@@ -84,6 +94,98 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     func clearError() {
         error = nil
+    }
+
+    func discardCurrentRecording() throws {
+        guard isRecording, let id = recordingID else { throw AudioCaptureDiscardError.noCurrentRecording }
+        guard mode == .quick else { throw AudioCaptureDiscardError.continuousRecordingCannotBeDiscarded }
+        guard canDiscardRecording else { throw AudioCaptureDiscardError.committedSegmentsExist }
+
+        isRecording = false
+        meterTimer?.invalidate()
+        meterTimer = nil
+        level = 0
+        let activeRecorder = recorder
+        let observedDuration = max(activeRecorder?.currentTime ?? 0, lastKnownSegmentDuration)
+        activeRecorder?.delegate = nil
+        activeRecorder?.stop()
+        let duration = min(segmentDuration, max(observedDuration, closedFileDuration(for: id)))
+        recorder = nil
+        segmentStart = nil
+        lastKnownSegmentDuration = 0
+        deactivateAudioSession()
+
+        do {
+            try store.discardDraft(id: id)
+            error = nil
+            clearDiscardedSession()
+        } catch {
+            let discardFailure = error.localizedDescription
+            if let recording = store.recording(id: id),
+               FileManager.default.fileExists(atPath: store.audioURL(for: recording).path) {
+                let restored: Recording
+                do {
+                    restored = try store.finish(id: id, duration: duration, interrupted: true)
+                } catch {
+                    var message = "取消未成功，原声仍保留，但恢复中断记录失败：\(error.localizedDescription)"
+                    do {
+                        try store.recordError(id: id, message: message)
+                    } catch {
+                        message += "（恢复说明也未能写入索引：\(error.localizedDescription)）"
+                    }
+                    self.error = message
+                    let remaining = store.recording(id: id)
+                    clearDiscardedSession()
+                    if let remaining { onSaved?(remaining) }
+                    throw AudioCaptureDiscardError.cancellationFailed(message)
+                }
+
+                var message = "取消未成功，原声已作为中断记录保留：\(discardFailure)"
+                do {
+                    try store.recordError(id: id, message: message)
+                } catch {
+                    message += "（取消失败说明未能写入索引：\(error.localizedDescription)）"
+                }
+                self.error = message
+                let saved = store.recording(id: id) ?? restored
+                clearDiscardedSession()
+                onSaved?(saved)
+                throw AudioCaptureDiscardError.cancellationFailed(message)
+            }
+
+            var message = "取消未完成，原声已删除，但空草稿索引未清理；下次恢复时会重试：\(discardFailure)"
+            do {
+                try store.recordError(id: id, message: message)
+            } catch {
+                message += "（索引错误说明也未能写入：\(error.localizedDescription)）"
+            }
+            self.error = message
+            let remaining = store.recording(id: id)
+            clearDiscardedSession()
+            if let remaining { onSaved?(remaining) }
+            throw AudioCaptureDiscardError.cancellationFailed(message)
+        }
+    }
+
+    private func clearDiscardedSession() {
+        recordingID = nil
+        accumulatedDuration = 0
+        segmentCount = 0
+        elapsed = 0
+        activeIntent = .note
+        mode = .quick
+    }
+
+    func mark(intent: RecordingIntent = .note) throws -> RecordingMarker {
+        guard isRecording, let id = recordingID, let recorder else {
+            throw AudioCaptureMarkerError.noActiveRecording
+        }
+        guard mode == .continuous else { throw AudioCaptureMarkerError.requiresContinuousMode }
+        let offset = min(segmentDuration, max(recorder.currentTime, lastKnownSegmentDuration))
+        guard offset.isFinite, offset >= 0 else { throw StoreError.invalidMarker }
+        let marker = RecordingMarker(id: UUID(), offset: offset, intent: intent)
+        try store.addMarker(id: id, marker: marker)
+        return marker
     }
 
     func recover() {
@@ -143,7 +245,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     private func beginSegment() throws {
         try checkFreeSpace()
-        let recording = try store.begin(source: source)
+        let recording = try store.begin(source: source, intent: activeIntent, mode: mode)
         recordingID = recording.id
 
         do {
@@ -161,6 +263,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
                 throw AudioCaptureError.recorderDidNotStart
             }
             recorder = nextRecorder
+            segmentCount += 1
             segmentStart = Date()
             lastKnownSegmentDuration = 0
             lastCapacityCheck = Date()
@@ -221,13 +324,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let observedDuration = max(activeRecorder?.currentTime ?? 0, lastKnownSegmentDuration)
         activeRecorder?.delegate = nil
         activeRecorder?.stop()
-        let closedFileDuration = store.recording(id: id).flatMap { recording -> TimeInterval? in
-            guard let audio = try? AVAudioFile(forReading: store.audioURL(for: recording)) else { return nil }
-            let sampleRate = audio.processingFormat.sampleRate
-            guard sampleRate > 0 else { return nil }
-            return Double(audio.length) / sampleRate
-        } ?? 0
-        let duration = min(segmentDuration, max(observedDuration, closedFileDuration))
+        let duration = min(segmentDuration, max(observedDuration, closedFileDuration(for: id)))
         recorder = nil
         recordingID = nil
         segmentStart = nil
@@ -331,6 +428,42 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
     private func segmentDidFail(recorderID: ObjectIdentifier, message: String) {
         guard let recorder, ObjectIdentifier(recorder) == recorderID, recordingID != nil else { return }
         stopWithError("录音编码失败：\(message)", interrupted: true)
+    }
+
+    private func closedFileDuration(for id: UUID) -> TimeInterval {
+        guard let recording = store.recording(id: id),
+              let audio = try? AVAudioFile(forReading: store.audioURL(for: recording)) else { return 0 }
+        let sampleRate = audio.processingFormat.sampleRate
+        guard sampleRate > 0 else { return 0 }
+        return Double(audio.length) / sampleRate
+    }
+}
+
+enum AudioCaptureDiscardError: LocalizedError {
+    case noCurrentRecording
+    case committedSegmentsExist
+    case continuousRecordingCannotBeDiscarded
+    case cancellationFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noCurrentRecording: return "当前没有可丢弃的录音。"
+        case .committedSegmentsExist: return "较早的录音分段已保存，无法撤销整次录音；可以正常停止并保存当前段。"
+        case .continuousRecordingCannotBeDiscarded: return "全天录音正在持续保存，不能丢弃当前分段；请正常停止录音。"
+        case .cancellationFailed(let message): return message
+        }
+    }
+}
+
+enum AudioCaptureMarkerError: LocalizedError {
+    case noActiveRecording
+    case requiresContinuousMode
+
+    var errorDescription: String? {
+        switch self {
+        case .noActiveRecording: return "当前没有正在录制的片段，无法添加标记。"
+        case .requiresContinuousMode: return "只有连续录音中可以标记此刻。"
+        }
     }
 }
 
