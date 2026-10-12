@@ -13,11 +13,11 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     private let store: RecordingStore
     private let source: RecordingSource
+    private let diagnostics: CaptureDiagnostics
     private var activeIntent: RecordingIntent = .note
     private let audioSession = AVAudioSession.sharedInstance()
     private var recorder: AVAudioRecorder?
     private var recordingID: UUID?
-    private var segmentStart: Date?
     private var lastKnownSegmentDuration: TimeInterval = 0
     private var accumulatedDuration: TimeInterval = 0
     private var segmentCount = 0
@@ -30,10 +30,12 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     var onSaved: ((Recording) -> Void)?
 
-    init(store: RecordingStore, source: RecordingSource) {
+    init(store: RecordingStore, source: RecordingSource, diagnostics: CaptureDiagnostics? = nil) {
         self.store = store
         self.source = source
+        self.diagnostics = diagnostics ?? CaptureDiagnostics(root: store.root)
         super.init()
+        self.diagnostics.startIfRequested { [weak self] in self?.diagnosticSnapshot() }
         observeAudioInterruptions()
         recover()
     }
@@ -69,6 +71,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
             segmentCount = 0
             elapsed = 0
             isRecording = true
+            diagnostics.record("start", details: ["mode": mode.rawValue])
             try beginSegment()
             startMeterTimer()
         } catch {
@@ -85,6 +88,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         }
         guard isRecording || recordingID != nil else { return }
         isRecording = false
+        diagnostics.record("stop", details: ["elapsedEstimate": String(elapsed)])
         meterTimer?.invalidate()
         meterTimer = nil
         level = 0
@@ -96,6 +100,10 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         error = nil
     }
 
+    func noteLifecycle(scenePhase: String, isLuminanceReduced: Bool) {
+        diagnostics.noteLifecycle(scenePhase: scenePhase, isLuminanceReduced: isLuminanceReduced)
+    }
+
     func discardCurrentRecording() throws {
         guard isRecording, let id = recordingID else { throw AudioCaptureDiscardError.noCurrentRecording }
         guard mode == .quick else { throw AudioCaptureDiscardError.continuousRecordingCannotBeDiscarded }
@@ -105,13 +113,13 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         meterTimer?.invalidate()
         meterTimer = nil
         level = 0
+        diagnostics.record("stop", details: ["kind": "discard"])
         let activeRecorder = recorder
         let observedDuration = max(activeRecorder?.currentTime ?? 0, lastKnownSegmentDuration)
         activeRecorder?.delegate = nil
         activeRecorder?.stop()
         let duration = min(segmentDuration, max(observedDuration, closedFileDuration(for: id)))
         recorder = nil
-        segmentStart = nil
         lastKnownSegmentDuration = 0
         deactivateAudioSession()
 
@@ -264,9 +272,9 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
             }
             recorder = nextRecorder
             segmentCount += 1
-            segmentStart = Date()
             lastKnownSegmentDuration = 0
             lastCapacityCheck = Date()
+            diagnostics.record("segment_begin", details: ["segmentUUID": recording.id.uuidString])
         } catch {
             if let recordingID {
                 do {
@@ -294,7 +302,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         recorder.updateMeters()
         let power = recorder.averagePower(forChannel: 0)
         level = max(0, min(1, (power + 60) / 60))
-        let runningDuration = min(segmentDuration, max(recorder.currentTime, segmentStart.map { Date().timeIntervalSince($0) } ?? 0))
+        let runningDuration = min(segmentDuration, max(0, recorder.currentTime))
         lastKnownSegmentDuration = max(lastKnownSegmentDuration, runningDuration)
         elapsed = accumulatedDuration + lastKnownSegmentDuration
 
@@ -310,6 +318,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
     private func stopWithError(_ message: String, interrupted: Bool) {
         guard isRecording || recordingID != nil else { return }
         isRecording = false
+        diagnostics.record("stop", details: ["kind": "error", "interrupted": String(interrupted)])
         error = message
         meterTimer?.invalidate()
         meterTimer = nil
@@ -318,8 +327,9 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         deactivateAudioSession()
     }
 
-    private func finishCurrentSegment(interrupted: Bool, message: String?) {
-        guard let id = recordingID else { return }
+    @discardableResult
+    private func finishCurrentSegment(interrupted: Bool, message: String?, notifySaved: Bool = true) -> Recording? {
+        guard let id = recordingID else { return nil }
         let activeRecorder = recorder
         let observedDuration = max(activeRecorder?.currentTime ?? 0, lastKnownSegmentDuration)
         activeRecorder?.delegate = nil
@@ -327,18 +337,23 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let duration = min(segmentDuration, max(observedDuration, closedFileDuration(for: id)))
         recorder = nil
         recordingID = nil
-        segmentStart = nil
         lastKnownSegmentDuration = 0
 
         guard duration > 0 else {
             do {
                 try store.discardEmptyCapture(id: id)
+                diagnostics.record("segment_finish", details: ["segmentUUID": id.uuidString,
+                                                                 "durationSeconds": "0",
+                                                                 "outcome": "empty"])
             } catch {
                 let message = message ?? error.localizedDescription
                 self.error = message
                 try? store.recordError(id: id, message: message)
+                diagnostics.record("segment_finish", details: ["segmentUUID": id.uuidString,
+                                                                 "durationSeconds": "0",
+                                                                 "outcome": "error"])
             }
-            return
+            return nil
         }
         do {
             var saved = try store.finish(id: id, duration: duration, interrupted: interrupted)
@@ -346,11 +361,19 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
             accumulatedDuration += duration
             elapsed = accumulatedDuration
             if message != nil, let updated = store.recording(id: id) { saved = updated }
-            onSaved?(saved)
+            diagnostics.record("segment_finish", details: ["segmentUUID": id.uuidString,
+                                                             "durationSeconds": String(duration),
+                                                             "outcome": interrupted ? "interrupted" : "saved"])
+            if notifySaved { onSaved?(saved) }
+            return saved
         } catch {
             let message = message ?? error.localizedDescription
             self.error = message
             try? store.recordError(id: id, message: message)
+            diagnostics.record("segment_finish", details: ["segmentUUID": id.uuidString,
+                                                             "durationSeconds": String(duration),
+                                                             "outcome": "error"])
+            return nil
         }
     }
 
@@ -370,6 +393,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.diagnostics.record("interruption", details: ["kind": "media_services_reset"])
                 self?.stopWithError("音频服务已重置，录音已停止并保存。", interrupted: true)
             }
         }
@@ -392,6 +416,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         default:
             message = "音频会话被系统停用，录音已停止并保存。"
         }
+        diagnostics.record("interruption", details: ["kind": String(describing: reason ?? .default)])
         stopWithError(message, interrupted: true)
     }
 
@@ -413,10 +438,12 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
     private func segmentDidFinish(recorderID: ObjectIdentifier, successfully: Bool) {
         guard let recorder, ObjectIdentifier(recorder) == recorderID, recordingID != nil else { return }
         guard successfully else {
+            diagnostics.record("encodeerror", details: ["kind": "finish_unsuccessful"])
             stopWithError(AudioCaptureError.encodingFailed.localizedDescription, interrupted: true)
             return
         }
-        finishCurrentSegment(interrupted: false, message: nil)
+        let saved = finishCurrentSegment(interrupted: false, message: nil, notifySaved: false)
+        defer { if let saved { onSaved?(saved) } }
         guard isRecording else { return }
         do {
             try beginSegment()
@@ -427,7 +454,18 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     private func segmentDidFail(recorderID: ObjectIdentifier, message: String) {
         guard let recorder, ObjectIdentifier(recorder) == recorderID, recordingID != nil else { return }
+        diagnostics.record("encodeerror", details: ["kind": "delegate"])
         stopWithError("录音编码失败：\(message)", interrupted: true)
+    }
+
+    private func diagnosticSnapshot() -> CaptureDiagnosticSnapshot {
+        CaptureDiagnosticSnapshot(recorderCurrentTime: recorder?.currentTime,
+                                  recorderIsRecording: recorder.map(\.isRecording),
+                                  meterLevel: level,
+                                  logicalIsRecording: isRecording,
+                                  elapsedEstimate: elapsed,
+                                  currentSegmentUUID: recordingID?.uuidString,
+                                  accumulatedDuration: accumulatedDuration)
     }
 
     private func closedFileDuration(for id: UUID) -> TimeInterval {

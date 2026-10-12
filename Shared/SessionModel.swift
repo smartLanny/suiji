@@ -27,10 +27,11 @@ final class SessionModel: ObservableObject {
         let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                appropriateFor: nil, create: true).appendingPathComponent("Suiji", isDirectory: true)
         store = try RecordingStore(root: root)
+        let diagnostics = CaptureDiagnostics(root: root)
         #if os(watchOS)
-        capture = AudioCapture(store: store, source: .watch)
+        capture = AudioCapture(store: store, source: .watch, diagnostics: diagnostics)
         #else
-        capture = AudioCapture(store: store, source: .phone)
+        capture = AudioCapture(store: store, source: .phone, diagnostics: diagnostics)
         #endif
         companion = CompanionSync(store: store)
         if let data = UserDefaults.standard.data(forKey: "retention"),

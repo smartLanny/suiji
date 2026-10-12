@@ -12,3 +12,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test persistence, retention and transcription contract
         run: swift test --scratch-path "$RUNNER_TEMP/suiji-tests"
+      - name: Test long-recording reports and background configuration
+        run: PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts python3 -m unittest discover -s scripts/tests -v

@@ -47,6 +47,9 @@ struct PhoneHome: View {
     private var today: [Recording] {
         visibleRecordings.filter { Calendar.current.isDateInToday($0.recordedAt) }.sorted { $0.recordedAt < $1.recordedAt }
     }
+    private var todayEntries: [PhoneTimelineEntry] {
+        phoneTimelineEntries(from: today)
+    }
     private var pending: [Recording] {
         visibleRecordings.filter { $0.transcriptionState != .completed }
     }
@@ -103,20 +106,29 @@ struct PhoneHome: View {
                         }
                         Spacer()
                         Button { appearanceOpen = true } label: {
-                            CompanionVisual(theme: model.theme, listening: capture.isRecording, level: capture.level, size: 77)
-                        }.buttonStyle(.plain).accessibilityLabel("切换陪伴形象")
+                            Label("外观", systemImage: "paintpalette")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(model.theme.color)
+                                .padding(.horizontal, 13).padding(.vertical, 9)
+                                .background(model.theme.softColor.opacity(0.68), in: Capsule())
+                        }.buttonStyle(.plain).accessibilityLabel("切换主题外观")
                     }.padding(.top, 18)
 
                     if today.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("今天，值得留下的").font(.custom("NotoSerifSC-Regular", size: 24))
-                            Text("一个突然的想法，\n一句想记住的话，\n都可以从这里开始。")
-                                .font(.body).lineSpacing(7).foregroundStyle(Palette.muted)
+                            Text("今天还没有记录").font(.custom("NotoSerifSC-Regular", size: 24))
+                            Text("说一句，留住此刻。")
+                                .font(.body).foregroundStyle(Palette.muted)
                         }.padding(.vertical, 15)
                     }
                     VStack(spacing: 0) {
-                        ForEach(today) { recording in
-                            NavigationLink(value: recording.id) { TimelineRow(recording: recording, theme: model.theme) }.buttonStyle(.plain)
+                        ForEach(todayEntries) { entry in
+                            switch entry {
+                            case .recording(let recording):
+                                NavigationLink(value: recording.id) { TimelineRow(recording: recording, theme: model.theme) }.buttonStyle(.plain)
+                            case .continuousGroup(let recordings):
+                                ContinuousRecordingGroupRow(recordings: recordings, theme: model.theme)
+                            }
                         }
                         HStack(alignment: .top, spacing: 12) {
                             Text("现在").font(.caption).frame(width: 42, alignment: .leading)
@@ -146,7 +158,6 @@ struct PhoneHome: View {
                     }
                     if !today.isEmpty {
                         HStack {
-                            Text("今天已留下 \(today.count) 段记录").font(.caption).foregroundStyle(Palette.muted)
                             Spacer()
                             Button("全部记忆", systemImage: "arrow.up.right") { selectedTab = 1 }.font(.caption)
                         }
@@ -221,18 +232,32 @@ struct PhoneHome: View {
             if capture.isRecording { capture.stop(); model.refresh() }
             else { Task { await capture.start(); model.refresh() } }
         } label: {
-            HStack(spacing: 9) {
-                Image(systemName: capture.isRecording ? "stop.fill" : "mic")
-                Text(capture.isRecording ? "停止并保存 · \(durationText(capture.elapsed))" : "说一句").fontWeight(.medium)
+            HStack(spacing: 14) {
+                CompanionVisual(theme: model.theme, listening: capture.isRecording, level: capture.level, size: 66)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(capture.isStarting ? "正在启动录音" : capture.isRecording ? "点我结束 · \(durationText(capture.elapsed))" : "点我说一句")
+                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.ink)
+                    Text(capture.isStarting ? "准备麦克风" : capture.isRecording ? "轻点保存" : "手机录音")
+                        .font(.caption).foregroundStyle(Palette.muted)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: capture.isRecording ? "stop.fill" : "waveform")
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(model.theme.color)
+                    .frame(width: 34, height: 34).background(model.theme.softColor, in: Circle())
             }
-            .font(.system(size: 17)).frame(maxWidth: .infinity).frame(height: 49)
+            .padding(.horizontal, 14).frame(maxWidth: .infinity, minHeight: 82)
+            .contentShape(RoundedRectangle(cornerRadius: 23))
         }
-        .buttonStyle(.plain).foregroundStyle(Color.white.opacity(0.95))
-        .background(capture.isRecording ? model.theme.color.opacity(0.84) : model.theme.color, in: Capsule())
-        .overlay(Capsule().stroke(.white.opacity(0.45), lineWidth: 0.7))
-        .shadow(color: model.theme.color.opacity(0.14), radius: 10, y: 4)
-        .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 10)
-        .disabled(capture.isStarting).accessibilityIdentifier("captureButton")
+        .buttonStyle(.plain)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 23, style: .continuous).stroke(model.theme.color.opacity(0.24), lineWidth: 1))
+        .shadow(color: model.theme.color.opacity(0.12), radius: 10, y: 4)
+        .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 8)
+        .disabled(capture.isStarting)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(capture.isStarting ? "正在启动手机录音" : capture.isRecording ? "点我结束并保存手机录音，已录时长 \(durationText(capture.elapsed))" : "点我开始手机录音")
+        .accessibilityHint(capture.isRecording ? "轻点停止并保存原声" : "轻点 Bot 开始本机录音")
+        .accessibilityIdentifier("captureButton")
     }
 
     private var chineseDate: String {

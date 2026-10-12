@@ -45,7 +45,8 @@ struct WatchHome: View {
     @ObservedObject var companion: CompanionSync
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("watchBotGesturesV1HintSeen") private var hintSeen = false
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+    @AppStorage("watchBotControlsV2HintSeen") private var hintSeen = false
     @GestureState private var touching = false
     @State private var touchStartedAt: Date?
     @State private var touchTranslation = CGSize.zero
@@ -87,7 +88,7 @@ struct WatchHome: View {
 
                         if selecting {
                             HStack {
-                                modeTarget(-1, title: continuous ? "停止" : "随记", icon: continuous ? "stop.fill" : "waveform")
+                                modeTarget(-1, title: continuous ? "标记" : "录音", icon: continuous ? "bookmark" : "waveform")
                                 Spacer(minLength: 8)
                                 modeTarget(1, title: continuous ? "日记标记" : "日记", icon: "book.closed")
                             }
@@ -104,7 +105,7 @@ struct WatchHome: View {
                             } else if let feedback {
                                 Text(feedback)
                             } else if !hintSeen {
-                                Text("轻点记录 · 按住选择")
+                                Text("轻点开停 · 按住更多")
                             }
                         }
                         .font(.caption2)
@@ -146,7 +147,7 @@ struct WatchHome: View {
                                 Label("标记日记起点", systemImage: "book.closed")
                             }
                             Button { showMore = false; finishRecording() } label: {
-                                Label("停止全天记录", systemImage: "stop.fill")
+                                Label("暂停录音", systemImage: "pause.fill")
                             }
                         } else {
                             Button { showMore = false; beginRecording(.journal) } label: {
@@ -186,6 +187,13 @@ struct WatchHome: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { resetTouch() }
+            capture.noteLifecycle(scenePhase: String(describing: phase), isLuminanceReduced: isLuminanceReduced)
+        }
+        .onChange(of: isLuminanceReduced) { _, reduced in
+            capture.noteLifecycle(scenePhase: String(describing: scenePhase), isLuminanceReduced: reduced)
+        }
+        .onAppear {
+            capture.noteLifecycle(scenePhase: String(describing: scenePhase), isLuminanceReduced: isLuminanceReduced)
         }
         .onChange(of: capture.error) { _, error in
             if error != nil && !capture.isRecording { recordingStoppedUnexpectedly = true }
@@ -207,30 +215,19 @@ struct WatchHome: View {
     }
 
     private var recordingStatus: some View {
-        Button {
-            if continuous { finishRecording() }
-            else if !capture.isRecording { beginRecording(.note, mode: .continuous) }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: capture.isRecording ? "record.circle.fill" : "record.circle")
-                    .font(.system(size: 16))
-                    .foregroundStyle(capture.isRecording ? Color.red : Color.white.opacity(0.55))
-                if capture.isStarting { Text("正在启动…") }
-                else if continuous { Text(durationText(capture.elapsed)).monospacedDigit() }
-                else if capture.isRecording {
-                    Text(recordingIntent == .journal ? "日记" : "随记")
-                    Text(durationText(capture.elapsed)).monospacedDigit()
-                } else { Text(recordingStoppedUnexpectedly ? "已停止" : "全天") }
-            }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.white.opacity(0.65))
-            .padding(.horizontal, 12)
-            .frame(minWidth: 80, maxHeight: .infinity)
-            .contentShape(Rectangle())
+        HStack(spacing: 6) {
+            Circle()
+                .fill(capture.isRecording ? Color.red : Color.white.opacity(0.4))
+                .frame(width: 5, height: 5)
+            if capture.isStarting { Text("正在开启…") }
+            else if capture.isRecording {
+                Text(recordingIntent == .journal ? "日记中" : "录音中")
+                Text(durationText(capture.elapsed)).monospacedDigit()
+            } else { Text(recordingStoppedUnexpectedly ? "录音已中断" : "未录音") }
         }
-        .buttonStyle(.plain)
-        .disabled(capture.isStarting || (capture.isRecording && !continuous))
-        .accessibilityLabel(continuous ? "停止全天记录" : capture.isRecording ? "随记录音计时" : "开启全天记录")
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(.white.opacity(0.65))
+        .accessibilityElement(children: .combine)
     }
 
     private func botButton(size: CGSize) -> some View {
@@ -260,9 +257,9 @@ struct WatchHome: View {
         .disabled(capture.isStarting)
         .handGestureShortcut(.primaryAction, isEnabled: !capture.isStarting && !showMore)
         .accessibilityIdentifier("captureButton")
-        .accessibilityLabel(continuous ? "标记这一刻" : capture.isRecording ? "停止并保存录音" : "开始随记")
+        .accessibilityLabel(capture.isRecording ? "暂停并保存录音" : "开始持续录音")
         .accessibilityValue(capture.isRecording ? durationText(capture.elapsed) : "未录音")
-        .accessibilityHint(continuous ? "轻点标记，按住后拖左停止、拖右标记日记起点" : capture.isRecording ? "轻点保存，向下拖动可取消未保存的首段" : "轻点记录，按住后拖向日记，拖回中央松手取消")
+        .accessibilityHint(continuous ? "轻点暂停，按住后拖左标记、拖右标记日记起点" : capture.isRecording ? "轻点保存，向下拖动可取消未保存的首段" : "轻点持续录音，按住后拖向日记，拖回中央松手取消")
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: selecting)
     }
 
@@ -319,7 +316,7 @@ struct WatchHome: View {
                 if wasChoosing {
                     guard abs(value.translation.height) < 65 else { return }
                     if value.translation.width < -selectionDistance {
-                        if continuous { finishRecording() } else { beginRecording(.note) }
+                        if continuous { markRecording(.note) } else { beginRecording(.note, mode: .continuous) }
                     } else if value.translation.width > selectionDistance {
                         if continuous { markRecording(.journal) } else { beginRecording(.journal) }
                     }
@@ -343,9 +340,8 @@ struct WatchHome: View {
 
     private func primaryAction() {
         guard !capture.isStarting else { return }
-        if continuous { markRecording(.note) }
-        else if capture.isRecording { finishRecording() }
-        else { beginRecording(.note) }
+        if capture.isRecording { finishRecording() }
+        else { beginRecording(.note, mode: .continuous) }
     }
 
     private func beginRecording(_ intent: RecordingIntent, mode: RecordingMode = .quick) {

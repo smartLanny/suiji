@@ -55,7 +55,7 @@ def write_info_plists() -> None:
   <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
   <key>LSRequiresIPhoneOS</key><true/>
   <key>MinimumOSVersion</key><string>$(IPHONEOS_DEPLOYMENT_TARGET)</string>
-  <key>NSMicrophoneUsageDescription</key><string>随记使用麦克风记录你主动口述的内容。</string>
+  <key>NSMicrophoneUsageDescription</key><string>随记使用麦克风保存你开启的连续录音和主动口述。</string>
   <key>UILaunchScreen</key><dict/>
   <key>UIBackgroundModes</key><array><string>audio</string></array>
   <key>UIAppFonts</key><array><string>{FONT_FILE_NAME}</string></array>
@@ -79,9 +79,9 @@ def write_info_plists() -> None:
   <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
   <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
   <key>MinimumOSVersion</key><string>$(WATCHOS_DEPLOYMENT_TARGET)</string>
-  <key>NSMicrophoneUsageDescription</key><string>随记使用 Apple Watch 麦克风记录你主动口述的内容。</string>
+  <key>NSMicrophoneUsageDescription</key><string>随记使用 Apple Watch 麦克风保存你开启的连续录音和主动口述。</string>
   <key>WKApplication</key><true/>
-  <key>WKBackgroundModes</key><array><string>audio</string></array>
+  <key>UIBackgroundModes</key><array><string>audio</string></array>
   <key>WKCompanionAppBundleIdentifier</key><string>com.lann.suiji</string>
 </dict>
 </plist>

@@ -82,17 +82,13 @@ struct CompanionVisual: View {
         self.centered = centered
     }
 
-    private var spriteColumn: Int {
-        listening ? 1 : 0
-    }
-
     private var animatedScale: CGFloat {
         guard listening, !reduceMotion else { return 1 }
         return 1 + CGFloat(max(0, min(1, level))) * 0.035
     }
 
     // Sprite cells have different transparent margins; align their visible content on Watch.
-    private var contentOffset: CGSize {
+    private func contentOffset(listening: Bool) -> CGSize {
         guard centered else { return .zero }
         switch theme {
         case .star: return CGSize(width: listening ? -0.052 : -0.041, height: -0.119)
@@ -102,8 +98,21 @@ struct CompanionVisual: View {
     }
 
     var body: some View {
+        ZStack {
+            spriteCell(listening: false).opacity(listening ? 0 : 1)
+            spriteCell(listening: true).opacity(listening ? 1 : 0)
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: listening)
+        .frame(width: size, height: size)
+        .scaleEffect(animatedScale)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: level)
+        .accessibilityHidden(true)
+    }
+
+    private func spriteCell(listening: Bool) -> some View {
         GeometryReader { geometry in
             let tile = geometry.size.width
+            let offset = contentOffset(listening: listening)
             Group {
                 if watchInkMask && theme == .ink {
                     Image("CompanionSprite")
@@ -116,14 +125,12 @@ struct CompanionVisual: View {
                 }
             }
             .frame(width: tile * 4, height: tile * 3, alignment: .topLeading)
-            .offset(x: (-CGFloat(spriteColumn) + contentOffset.width) * tile,
-                    y: (-CGFloat(theme.spriteRow) + contentOffset.height) * tile)
+            .offset(x: (-CGFloat(listening ? 1 : 0) + offset.width) * tile,
+                    y: (-CGFloat(theme.spriteRow) + offset.height) * tile)
         }
         .frame(width: size, height: size)
         .clipped()
-        .scaleEffect(animatedScale)
-        .animation(.easeOut(duration: 0.18), value: level)
-        .accessibilityHidden(true)
+        .transaction { $0.animation = nil }
     }
 }
 

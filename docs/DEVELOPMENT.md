@@ -36,7 +36,7 @@ xcodebuild -project Suiji.xcodeproj -scheme SuijiWatch \
 ## 真机运行
 
 1. 在 Xcode 登录自己的 Apple Developer 账号；生成工程时传入自己的 Team，检查两个 target 的自动签名。连接并选择 iPhone，按系统提示开启开发者模式和信任，运行 `Suiji`。
-2. 允许麦克风，点「说一句」，点「停止并保存」后直接返回并保存，无第二个完成确认。进入记录回听；不要把启动成功当作音频保存成功。
+2. 允许麦克风，轻点底部 Bot 录音，再点停止后直接返回并保存，无第二个完成确认。进入记录回听；不要把启动成功当作音频保存成功。
 3. 手机设置填写服务地址和模型，按服务要求输入 Key；无需 Key 的网关可留空。真实上传应由用户主动配置服务，测试不使用个人 Key。Key 仅进手机 Keychain。
 4. iPhone 的 Watch App →「我的手表」→ 向下找到「可用 App」→「随记」→「安装」（新版系统可能归于 App 分组）。保持手表与手机已配对、联网且靠近。最新版手机产物已嵌入 Watch App；本工程要求 watchOS 27。见 [Apple 安装说明](https://support.apple.com/en-us/109023)。
 5. 如果列表中没有随记或安装失败，在 Xcode Device Hub 中确认配对手表已可用；选择 `SuijiWatch` scheme 和该实体 Watch，再运行。需要先处理 Apple 提示的手表开发者模式、设备注册及签名；不要用仅手机安装成功推断 Watch 已安装。见 [Xcode 配对说明](https://developer.apple.com/documentation/xcode/pairing-your-devices-with-your-mac)。
@@ -89,6 +89,10 @@ xcodebuild -project Suiji.xcodeproj -scheme Suiji \
 
 仓库为 [smartLanny/suiji](https://github.com/smartLanny/suiji)。只提交源码、资源、生成脚本及可维护文档，不提交设备容器、录音、manifest、凭据或签名材料。提交前记录相关测试与真机证据；在 [验收表](ACCEPTANCE.md) 更新结果，保持「已实现」「已编译」「已真机验证」分别可查。
 
-GitHub Actions 在 push / pull request 后运行纯核心 SwiftPM 测试；iOS 27 / watchOS 27 App 的编译和界面验收仍在具备相应 SDK 的本机执行。
+GitHub Actions 在 push / pull request 后运行核心 SwiftPM 测试，以及 Python 诊断报告和工程配置回归测试；iOS 27 / watchOS 27 App 的编译和界面验收仍在具备相应 SDK 的本机执行。
 
 持久化变更需考虑现有 manifest 版本及旧数据迁移。公共行为与数据路径见 [架构](ARCHITECTURE.md)，后续范围见 [路线图](ROADMAP.md)。
+
+### 全天录音诊断
+
+[长录测试文档](LONG_RECORDING_TESTS.md) 给出 Release、无 debugger、有界采样与本地报告命令。不要为更新安装或附加诊断强制终止正在录音的 App。录音、转写、同步回执和电量是四类独立证据；模拟器界面测试不能代替佩戴状态的 S9 长测。

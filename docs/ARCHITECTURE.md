@@ -1,6 +1,6 @@
 # 原生架构
 
-本文描述 2026-10-12 的实际实现。当前闭环是录音、本地保存、Watch 向手机同步、通用 ASR 转写、回听和原声留存；完整产品范围见 [路线图](ROADMAP.md)。
+本文描述 2026-10-13 的实际实现。当前闭环是录音、本地保存、Watch 向手机同步、通用 ASR 转写、回听和原声留存；完整产品范围见 [路线图](ROADMAP.md)。
 
 ## 模块与数据路径
 
@@ -8,6 +8,7 @@
 | --- | --- |
 | `Sources/SuijiCore` | 录音模型、文件与 manifest 持久化、留存规则、通用 ASR 客户端；通过 SwiftPM 测试 |
 | `Shared/AudioCapture.swift` | AVAudioRecorder、麦克风权限、5 分钟分段、中断保存、启动时恢复未完成录音 |
+| `Shared/CaptureDiagnostics.swift` | 显式开启、限时限量的本地录音诊断，不改变采集和同步 |
 | `Shared/CompanionSync.swift` | WatchConnectivity 文件排队、手机落盘、应用级回执、Watch 副本释放 |
 | `Shared/SessionModel.swift` | 界面状态、串行转写队列、恢复与清理、配置和 Keychain |
 | `iOS` / `Watch` | 各端 SwiftUI；共用核心源码直接编译进两端 App |
@@ -29,7 +30,7 @@ Watch 麦克风 → 手表 Audio/UUID.m4a → transferFile
 
 - 采集状态：`recording → ready`；系统中断或意外结束恢复为 `interrupted`，可读的部分仍可转写。中断后由用户重新开始录音。
 - 转写状态：`pending → transcribing → completed / failed`。只有非空文字持久保存后才算完成；失败保留原声并允许重试。重启时把遗留的 `transcribing` 恢复为 `pending`；任务取消也回到待处理。
-- 同步状态独立于转写。`transferFile` 排队或系统传输完成不等于手机已保存。手机完成导入与 manifest 保存后才发 `recordingReceipt`；Watch 收到回执并写入 `phoneReceivedAt` 后才释放副本。系统决定传输时机，未承诺到达时延；配对实机闭环尚未验收。
+- 同步状态独立于转写。`transferFile` 排队或系统传输完成不等于手机已保存。手机完成导入与 manifest 保存后才发 `recordingReceipt`；Watch 收到回执并写入 `phoneReceivedAt` 后才释放副本。系统决定传输时机，未承诺到达时延；首次短录和标记已验证配对实机闭环，后台多轮与离线重传仍待测。
 - ASR 目前使用普通 URLSession 上传，前台串行处理，申请有限的 UIKit 后台收尾时间；到期取消，下一次激活续处理。没有后台 URLSession 或 BGProcessingTask，也没有 App 被终止后持续转写的保证。
 
 ## 留存与文件保护
@@ -64,3 +65,13 @@ Key 只在手机设置输入和 Keychain 保存，不进 UserDefaults、Watch �
 `Recording.mode` / `ClipEnvelope.mode` 区分 `quick` 和 `continuous`，旧数据缺字段时为 `quick`。连续录音仍使用同一录音器及 5 分钟保存/同步链路；界面只在 `AudioCapture.isRecording` 为真时显示正在录制，不根据开关偏好假定后台仍运行。
 
 `RecordingMarker` 包含稳定 ID、当前音频分段内的秒偏移 `offset`、`note` / `journal` 意图。`mark(intent:)` 从当前录音器取得位置，store 写入成功才返回，UI 才显示“已标记”；不触发停止、切段或第二个录音器。标记数组随 envelope 同步，手机详情展示时间；`journal` 标记只是日记起点，尚未生成整理文本或 Obsidian 文件。旧数据缺少标记时按空数组解码。
+
+## 后台录音与可观测性
+
+Watch 和手机都配置 `UIBackgroundModes = [audio]`；`WKBackgroundModes` 不能代替这个音频字段。权限说明同时涵盖连续记录与主动口述。录音开始仍由用户在前台发起，不使用虚假的 workout session 保活。
+
+显示时长来自 `AVAudioRecorder.currentTime`，不再在实际录音进度为零时使用墙钟递增。分段结束后先保存音频索引，再尝试开始下一段，最后调用上一段的 `onSaved` 做刷新和同步；用 defer 确保下一段启动失败时，上一段仍只通知一次。这个改动缩短交接路径，并不保证无缝，需测实际边界音频。
+
+诊断默认关闭，仅显式 `SUIJI_DIAGNOSTICS_MINUTES=1...1440` 启用。60 秒采样、1600 条总上限、限时结束；结束诊断不停止用户录音。电池监测按启用前状态恢复。编码与原子写盘在串行后台队列处理，合并未写快照；进程突然结束可能损失最后诊断快照，不由此推定录音丢失。日志不含音频、转写或 Key，完整字段与测试方法见 [长录测试](LONG_RECORDING_TESTS.md)。
+
+iPhone 主页把同日同来源、相邻间隔 −0.5 至 5 秒的连续录音折叠展示，仍保留每段稳定 ID、真实时长和详情入口；这是呈现分组，不新增逻辑 session 或抹去间隔。底部 Bot 只控制手机麦克风，不暗示远程控制 Watch。

@@ -38,6 +38,12 @@
 			path = "AudioCapture.swift";
 			sourceTree = "<group>";
 		};
+		A95122AAD37F59E595004139 /* CaptureDiagnostics.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "CaptureDiagnostics.swift";
+			sourceTree = "<group>";
+		};
 		D1068007A29258C1B303EBFF /* CompanionSync.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
@@ -60,6 +66,7 @@
 			isa = PBXGroup;
 			children = (
 				0CFC11E2504F5E3CAD095AD2 /* AudioCapture.swift */,
+				A95122AAD37F59E595004139 /* CaptureDiagnostics.swift */,
 				D1068007A29258C1B303EBFF /* CompanionSync.swift */,
 				B1D20650AD465C86A99B66DB /* CompanionVisual.swift */,
 				A9815029A33A523CA0583675 /* SessionModel.swift */,
@@ -71,6 +78,12 @@
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
 			path = "RecordingDetail.swift";
+			sourceTree = "<group>";
+		};
+		E8459FE2A9D55CE9865FC923 /* RecordingTimeline.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "RecordingTimeline.swift";
 			sourceTree = "<group>";
 		};
 		9010F667D2105F3F8153CD3F /* SettingsView.swift */ = {
@@ -89,6 +102,7 @@
 			isa = PBXGroup;
 			children = (
 				A3D7B831B77D58AD95033C1E /* RecordingDetail.swift */,
+				E8459FE2A9D55CE9865FC923 /* RecordingTimeline.swift */,
 				9010F667D2105F3F8153CD3F /* SettingsView.swift */,
 				55FC6489268A52C4B7858C54 /* SuijiApp.swift */,
 			);
@@ -241,6 +255,14 @@
 			isa = PBXBuildFile;
 			fileRef = 0CFC11E2504F5E3CAD095AD2 /* AudioCapture.swift */;
 		};
+		F6F886A9E9B155D5A029E923 /* CaptureDiagnostics.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = A95122AAD37F59E595004139 /* CaptureDiagnostics.swift */;
+		};
+		2FA16F038CA95D05A8C9A812 /* CaptureDiagnostics.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = A95122AAD37F59E595004139 /* CaptureDiagnostics.swift */;
+		};
 		336A4A3615535DA881240E26 /* CompanionSync.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = D1068007A29258C1B303EBFF /* CompanionSync.swift */;
@@ -268,6 +290,10 @@
 		72E53D823D3E5D938C461EBB /* RecordingDetail.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = A3D7B831B77D58AD95033C1E /* RecordingDetail.swift */;
+		};
+		60000BC3143652419A8DF2AC /* RecordingTimeline.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = E8459FE2A9D55CE9865FC923 /* RecordingTimeline.swift */;
 		};
 		A3D5F5FCD5845C47B80BF075 /* SettingsView.swift in Sources */ = {
 			isa = PBXBuildFile;
@@ -305,10 +331,12 @@
 				6CD0641A49A05175908A090C /* RecordingStore.swift in Sources */,
 				2597D0D4165D5535BF90857E /* TranscriptionClient.swift in Sources */,
 				73FF1659228F517297F3F148 /* AudioCapture.swift in Sources */,
+				F6F886A9E9B155D5A029E923 /* CaptureDiagnostics.swift in Sources */,
 				336A4A3615535DA881240E26 /* CompanionSync.swift in Sources */,
 				F8AF582FF9AA5DF9AF781C80 /* CompanionVisual.swift in Sources */,
 				AEDA5693EB52544FB2286FE5 /* SessionModel.swift in Sources */,
 				72E53D823D3E5D938C461EBB /* RecordingDetail.swift in Sources */,
+				60000BC3143652419A8DF2AC /* RecordingTimeline.swift in Sources */,
 				A3D5F5FCD5845C47B80BF075 /* SettingsView.swift in Sources */,
 				A29F24B6C50B50A4B9E7FADF /* SuijiApp.swift in Sources */,
 			);
@@ -322,6 +350,7 @@
 				1EA8D8CC88CD5465B3A6237D /* RecordingStore.swift in Sources */,
 				6517C5214204502FBE947624 /* TranscriptionClient.swift in Sources */,
 				B3261175C5E55164B5A9F7A6 /* AudioCapture.swift in Sources */,
+				2FA16F038CA95D05A8C9A812 /* CaptureDiagnostics.swift in Sources */,
 				6ADAE345C147508383E6CF02 /* CompanionSync.swift in Sources */,
 				89D12CE7AE3C585395834F8D /* CompanionVisual.swift in Sources */,
 				3CBE8166F70D583EA3EC6AE2 /* SessionModel.swift in Sources */,
