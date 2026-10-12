@@ -64,12 +64,17 @@ struct PhoneHome: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Text("随记").font(.custom("Songti SC", size: 22)).foregroundStyle(Palette.ink) }
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 5) {
-                        Circle().fill(capture.isRecording ? model.theme.color : Palette.muted).frame(width: 5, height: 5)
-                        Text(capture.isRecording ? "正在记录" : "随时记下").font(.caption2)
-                    }.foregroundStyle(capture.isRecording ? model.theme.color : Palette.muted)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { selectedTab = 0 } label: { Text("随记").font(.custom("NotoSerifSC-Regular", size: 22)).foregroundStyle(Palette.ink) }
+                        .buttonStyle(.plain)
+                }.sharedBackgroundVisibility(.hidden)
+                if capture.isRecording {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        HStack(spacing: 5) {
+                            Circle().fill(model.theme.color).frame(width: 5, height: 5)
+                            Text("正在记录").font(.caption2)
+                        }.foregroundStyle(model.theme.color).fixedSize()
+                    }.sharedBackgroundVisibility(.hidden)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("设置", systemImage: "gearshape") { settingsOpen = true }
@@ -93,7 +98,7 @@ struct PhoneHome: View {
                 VStack(alignment: .leading, spacing: 25) {
                     HStack {
                         VStack(alignment: .leading, spacing: 9) {
-                            Text(chineseDate).font(.custom("Songti SC", size: 34))
+                            Text(chineseDate).font(.custom("NotoSerifSC-Regular", size: 34))
                             Text(Date().formatted(.dateTime.weekday(.wide)) + " · 今天").font(.caption).foregroundStyle(Palette.muted)
                         }
                         Spacer()
@@ -104,7 +109,7 @@ struct PhoneHome: View {
 
                     if today.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("今天，值得留下的").font(.custom("Songti SC", size: 24))
+                            Text("今天，值得留下的").font(.custom("NotoSerifSC-Regular", size: 24))
                             Text("一个突然的想法，\n一句想记住的话，\n都可以从这里开始。")
                                 .font(.body).lineSpacing(7).foregroundStyle(Palette.muted)
                         }.padding(.vertical, 15)
@@ -118,7 +123,7 @@ struct PhoneHome: View {
                             Circle().fill(model.theme.color).frame(width: 7, height: 7).padding(.top, 5)
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(capture.isRecording ? "正在倾听" : "想到什么，就记下来")
-                                    .font(.custom("Songti SC", size: 21))
+                                    .font(.custom("NotoSerifSC-Regular", size: 21))
                                 Text(capture.isRecording ? "\(durationText(capture.elapsed)) · 原声正在保存" : "轻点下方，说一句。")
                                     .font(.caption).foregroundStyle(Palette.muted)
                             }
@@ -159,7 +164,7 @@ struct PhoneHome: View {
     private var memories: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Text("记忆").font(.custom("Songti SC", size: 34)).padding(.top, 20)
+                Text("记忆").font(.custom("NotoSerifSC-Regular", size: 34)).padding(.top, 20)
                 Text("那些不想忘记的，慢慢留在这里。").font(.subheadline).foregroundStyle(Palette.muted)
                 HStack(spacing: 9) {
                     Image(systemName: "magnifyingglass").foregroundStyle(Palette.muted)
@@ -174,8 +179,8 @@ struct PhoneHome: View {
                     NavigationLink(value: recording.id) {
                         VStack(alignment: .leading, spacing: 10) {
                             Text(recording.recordedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(Palette.muted)
-                            Text(recording.title).font(.headline).foregroundStyle(Palette.ink).lineLimit(2)
-                            Text(recording.transcript ?? transcriptionLabel(recording)).font(.subheadline).foregroundStyle(Palette.muted).lineLimit(3)
+                            Text(recording.transcript ?? recording.title).font(.body).lineSpacing(4).foregroundStyle(Palette.ink).lineLimit(4)
+                            Text(transcriptionLabel(recording)).font(.caption).foregroundStyle(Palette.muted)
                             Rectangle().fill(Palette.line).frame(height: 0.5).padding(.top, 12)
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }.buttonStyle(.plain)
@@ -190,7 +195,7 @@ struct PhoneHome: View {
     private var inbox: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Text("待处理").font(.custom("Songti SC", size: 34)).padding(.top, 20)
+                Text("待处理").font(.custom("NotoSerifSC-Regular", size: 34)).padding(.top, 20)
                 Text(pending.isEmpty ? "都已收好，留点时间给自己。" : "原声已经收好，文字会在这里接上。")
                     .font(.subheadline).foregroundStyle(Palette.muted)
                 if pending.isEmpty {
@@ -244,7 +249,7 @@ struct TimelineRow: View {
     let theme: CompanionTheme
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
-            Text(recording.recordedAt.formatted(date: .omitted, time: .shortened))
+            Text(recording.recordedAt.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "en_GB"))))
                 .font(.system(size: 12).monospacedDigit()).foregroundStyle(Palette.muted)
                 .frame(width: 43, alignment: .leading).padding(.top, 2)
             VStack(spacing: 8) {
@@ -253,13 +258,11 @@ struct TimelineRow: View {
                 Rectangle().fill(Palette.line).frame(width: 0.6)
             }.frame(width: 14)
             VStack(alignment: .leading, spacing: 9) {
-                HStack {
-                    Text(recording.source == .watch ? "手表随记" : "随手记下").font(.caption2).foregroundStyle(Palette.muted)
-                    Spacer()
+                HStack(alignment: .top) {
+                    Text(recording.transcript ?? recording.title).font(.system(size: 16)).lineSpacing(4)
+                        .foregroundStyle(Palette.ink).lineLimit(4).frame(maxWidth: .infinity, alignment: .leading)
                     if recording.isKept { Image(systemName: "bookmark.fill").font(.caption2).foregroundStyle(theme.color) }
                 }
-                Text(recording.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(2)
-                if let transcript = recording.transcript { Text(transcript).font(.system(size: 13)).lineSpacing(4).foregroundStyle(Palette.muted).lineLimit(3) }
                 HStack(spacing: 6) {
                     Text(durationText(recording.duration))
                     Text("·")
@@ -311,6 +314,6 @@ struct AppearanceView: View {
                 .navigationTitle("外观").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭", systemImage: "xmark") { dismiss() }.labelStyle(.iconOnly) } }
         }.presentationDetents([.height(435)]).presentationDragIndicator(.visible)
-            .preferredColorScheme(.light)
+            .preferredColorScheme(.light).tint(model.theme.color)
     }
 }

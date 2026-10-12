@@ -51,7 +51,7 @@ struct RecordingDetail: View {
                     VStack(alignment: .leading, spacing: 22) {
                         Text(recording.recordedAt.formatted(date: .complete, time: .shortened))
                             .font(.caption).foregroundStyle(Palette.muted)
-                        Text(recording.title).font(.custom("Songti SC", size: 28)).foregroundStyle(Palette.ink)
+                        Text(recording.title).font(.custom("NotoSerifSC-Regular", size: 28)).foregroundStyle(Palette.ink)
                         HStack {
                             Label(recording.source == .watch ? "Apple Watch" : "iPhone", systemImage: recording.source == .watch ? "applewatch" : "iphone")
                             Spacer()

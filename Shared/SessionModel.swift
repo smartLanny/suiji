@@ -186,7 +186,7 @@ enum APIKeyStore {
         let status = SecItemCopyMatching(query as CFDictionary, &value)
         if status == errSecItemNotFound { return "" }
         guard status == errSecSuccess, let data = value as? Data, let key = String(data: data, encoding: .utf8) else {
-            throw KeyError.unavailable
+            throw KeyError.unavailable(status)
         }
         return key
     }
@@ -200,12 +200,21 @@ enum APIKeyStore {
         if status == errSecItemNotFound {
             status = SecItemAdd(identity.merging(attributes) { _, new in new } as CFDictionary, nil)
         }
-        guard status == errSecSuccess else { throw KeyError.unavailable }
+        guard status == errSecSuccess else { throw KeyError.unavailable(status) }
     }
 
     enum KeyError: LocalizedError {
-        case unavailable
-        var errorDescription: String? { "无法访问系统钥匙串，请解锁手机后再试。" }
+        case unavailable(OSStatus)
+        var errorDescription: String? {
+            switch self {
+            case .unavailable(errSecInteractionNotAllowed):
+                return "钥匙串暂不可用，请解锁手机后再试。"
+            case .unavailable(errSecMissingEntitlement):
+                return "当前安装的签名配置不完整，请更新安装随记后重试。"
+            case .unavailable:
+                return "暂时无法访问系统钥匙串，请稍后重试。"
+            }
+        }
     }
 }
 #endif

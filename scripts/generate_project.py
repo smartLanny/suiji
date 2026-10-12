@@ -15,6 +15,7 @@ CONFIG_DIR = ROOT / "Config"
 PROJECT_FILE = PROJECT_DIR / "project.pbxproj"
 IOS_BUNDLE_ID = "com.lann.suiji"
 WATCH_BUNDLE_ID = "com.lann.suiji.watchkitapp"
+FONT_FILE_NAME = "NotoSerifSC[wght].ttf"
 NAMESPACE = uuid.UUID("7d44d0aa-845b-4bfb-a0d4-38c920ab2edc")
 
 
@@ -39,7 +40,7 @@ def pbx_value(value: object) -> str:
 def write_info_plists() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     (CONFIG_DIR / "Info-iOS.plist").write_text(
-        """<?xml version="1.0" encoding="UTF-8"?>
+        f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -57,6 +58,7 @@ def write_info_plists() -> None:
   <key>NSMicrophoneUsageDescription</key><string>随记使用麦克风记录你主动口述的内容。</string>
   <key>UILaunchScreen</key><dict/>
   <key>UIBackgroundModes</key><array><string>audio</string></array>
+  <key>UIAppFonts</key><array><string>{FONT_FILE_NAME}</string></array>
 </dict>
 </plist>
 """,
@@ -81,6 +83,22 @@ def write_info_plists() -> None:
   <key>WKApplication</key><true/>
   <key>WKBackgroundModes</key><array><string>audio</string></array>
   <key>WKCompanionAppBundleIdentifier</key><string>com.lann.suiji</string>
+</dict>
+</plist>
+""",
+        encoding="utf-8",
+    )
+
+
+def write_entitlements() -> None:
+    (CONFIG_DIR / "Suiji.entitlements").write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>application-identifier</key><string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>com.apple.developer.team-identifier</key><string>$(DEVELOPMENT_TEAM)</string>
+  <key>keychain-access-groups</key><array><string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string></array>
 </dict>
 </plist>
 """,
@@ -193,6 +211,7 @@ def make_target_settings(platform: str, configuration: str, team: str | None) ->
     }
     if platform == "iOS":
         settings.update({
+            "CODE_SIGN_ENTITLEMENTS": "Config/Suiji.entitlements",
             "INFOPLIST_FILE": "Config/Info-iOS.plist",
             "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
             "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/Frameworks"],
@@ -257,6 +276,7 @@ def generate(team: str | None = None) -> None:
     PROJECT_DIR.mkdir(parents=True, exist_ok=True)
     SCHEME_DIR.mkdir(parents=True, exist_ok=True)
     write_info_plists()
+    write_entitlements()
     project = ProjectFile()
 
     directory_specs = [
@@ -284,7 +304,7 @@ def generate(team: str | None = None) -> None:
     shared_group, ios_group, watch_group = (entry[0] for entry in source_groups[1:])
 
     config_children: list[tuple[str, str]] = []
-    for filename in ("Info-iOS.plist", "Info-watchOS.plist"):
+    for filename in ("Info-iOS.plist", "Info-watchOS.plist", "Suiji.entitlements"):
         ref = project.add(
             f"file:Config/{filename}",
             filename,
@@ -304,6 +324,26 @@ def generate(team: str | None = None) -> None:
         "\t\t\tpath = Assets.xcassets;\n"
         "\t\t\tsourceTree = \"<group>\";\n",
     )
+
+    font_children: list[tuple[str, str]] = []
+    font_references: dict[str, str] = {}
+    for filename, file_type in (
+        (FONT_FILE_NAME, "file"),
+        ("OFL.txt", "text"),
+        ("FONT_SOURCE.md", "text.markdown"),
+    ):
+        ref = project.add(
+            f"file:Resources/Fonts/{filename}",
+            filename,
+            "\t\t\tisa = PBXFileReference;\n"
+            f"\t\t\tlastKnownFileType = {file_type};\n"
+            f"\t\t\tpath = {pbx_quote(filename)};\n"
+            "\t\t\tsourceTree = \"<group>\";\n",
+        )
+        font_children.append((ref, filename))
+        font_references[filename] = ref
+    fonts_group = project.group("Resources:Fonts", "Fonts", font_children, "Fonts")
+    resources_group = project.group("Resources", "Resources", [(fonts_group, "Fonts")], "Resources")
 
     products: list[tuple[str, str]] = []
     ios_product = project.add(
@@ -352,6 +392,16 @@ def generate(team: str | None = None) -> None:
         asset_catalog,
         "Assets.xcassets in Resources",
     )
+    ios_resource_files = [(ios_asset_build_file, ios_asset_comment)]
+    for filename in (FONT_FILE_NAME, "OFL.txt"):
+        resource_path = Path("Resources/Fonts") / filename
+        build_file, comment = project.build_file(
+            "Suiji",
+            resource_path,
+            font_references[filename],
+            f"{filename} in Resources",
+        )
+        ios_resource_files.append((build_file, comment))
 
     ios_sources_phase = project.phase("Suiji:Sources", "Sources", "PBXSourcesBuildPhase", ios_source_files)
     watch_sources_phase = project.phase("SuijiWatch:Sources", "Sources", "PBXSourcesBuildPhase", watch_source_files)
@@ -361,7 +411,7 @@ def generate(team: str | None = None) -> None:
         "Suiji:Resources",
         "Resources",
         "PBXResourcesBuildPhase",
-        [(ios_asset_build_file, ios_asset_comment)],
+        ios_resource_files,
     )
     watch_resources_phase = project.phase(
         "SuijiWatch:Resources",
@@ -470,6 +520,7 @@ def generate(team: str | None = None) -> None:
             (watch_group, "Watch"),
             (config_group, "Config"),
             (asset_catalog, "Assets.xcassets"),
+            (resources_group, "Resources"),
             (products_group, "Products"),
         ],
     )

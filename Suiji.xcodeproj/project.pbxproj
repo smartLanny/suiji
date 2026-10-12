@@ -129,11 +129,18 @@
 			path = "Info-watchOS.plist";
 			sourceTree = "<group>";
 		};
+		C8D641BB474B5F438B88CCFD /* Suiji.entitlements */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = "Suiji.entitlements";
+			sourceTree = "<group>";
+		};
 		73283997E5245950BC580E3E /* Config */ = {
 			isa = PBXGroup;
 			children = (
 				6B365E3F1EB35827A39E2637 /* Info-iOS.plist */,
 				5DA30597B2CE5C16A379B28F /* Info-watchOS.plist */,
+				C8D641BB474B5F438B88CCFD /* Suiji.entitlements */,
 			);
 			path = "Config";
 			sourceTree = "<group>";
@@ -142,6 +149,42 @@
 			isa = PBXFileReference;
 			lastKnownFileType = folder.assetcatalog;
 			path = Assets.xcassets;
+			sourceTree = "<group>";
+		};
+		CAF9790FA84C545FAA85871E /* NotoSerifSC[wght].ttf */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			path = "NotoSerifSC[wght].ttf";
+			sourceTree = "<group>";
+		};
+		5D2C6312DB4C51B49539AFA8 /* OFL.txt */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = "OFL.txt";
+			sourceTree = "<group>";
+		};
+		F9B8CFF5269B5759B7482903 /* FONT_SOURCE.md */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.markdown;
+			path = "FONT_SOURCE.md";
+			sourceTree = "<group>";
+		};
+		3EA5B0856465506686851910 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				CAF9790FA84C545FAA85871E /* NotoSerifSC[wght].ttf */,
+				5D2C6312DB4C51B49539AFA8 /* OFL.txt */,
+				F9B8CFF5269B5759B7482903 /* FONT_SOURCE.md */,
+			);
+			path = "Fonts";
+			sourceTree = "<group>";
+		};
+		6B3FDDF77911593DAA4B03C4 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				3EA5B0856465506686851910 /* Fonts */,
+			);
+			path = "Resources";
 			sourceTree = "<group>";
 		};
 		938AC7CE00B2597A9B879EBF /* Suiji.app */ = {
@@ -246,6 +289,14 @@
 			isa = PBXBuildFile;
 			fileRef = 52F767B7997259788F1FAC3B /* Assets.xcassets */;
 		};
+		7CAE29E71D49557E8FB9BBDA /* NotoSerifSC[wght].ttf in Resources */ = {
+			isa = PBXBuildFile;
+			fileRef = CAF9790FA84C545FAA85871E /* NotoSerifSC[wght].ttf */;
+		};
+		017AF49F18F25F1D9891E84F /* OFL.txt in Resources */ = {
+			isa = PBXBuildFile;
+			fileRef = 5D2C6312DB4C51B49539AFA8 /* OFL.txt */;
+		};
 		FC77E47D39AA56A397D67255 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -297,6 +348,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				1F5C802F4E545D63BDC9222D /* Assets.xcassets in Resources */,
+				7CAE29E71D49557E8FB9BBDA /* NotoSerifSC[wght].ttf in Resources */,
+				017AF49F18F25F1D9891E84F /* OFL.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -378,6 +431,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;
+				CODE_SIGN_ENTITLEMENTS = Config/Suiji.entitlements;
 				INFOPLIST_FILE = Config/Info-iOS.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -405,6 +459,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;
+				CODE_SIGN_ENTITLEMENTS = Config/Suiji.entitlements;
 				INFOPLIST_FILE = Config/Info-iOS.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -542,6 +597,7 @@
 				EE6628CCB0D95E9DA564F1F7 /* Watch */,
 				73283997E5245950BC580E3E /* Config */,
 				52F767B7997259788F1FAC3B /* Assets.xcassets */,
+				6B3FDDF77911593DAA4B03C4 /* Resources */,
 				EBDE4D04AB425CA4B26E99CF /* Products */,
 			);
 			sourceTree = "<group>";

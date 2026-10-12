@@ -46,7 +46,15 @@ Personal Team 属于个人设备测试方式，免费签名配置有效期为 7 
 
 ### 模拟器与接口联调
 
-用 Xcode 安装 iOS 27 Simulator runtime，创建 iPhone Air，再用 `Suiji` scheme 选择该模拟器运行。模拟器可检查界面、保存及 HTTP 链路，不能替代 WatchConnectivity 配对真机测试或续航测量。
+用 Xcode 安装 iOS 27 Simulator runtime，创建 iPhone Air，再用 `Suiji` scheme 选择该模拟器运行。本机 Xcode 27 beta 4 通过 Device Hub 显示虚拟设备。模拟器可检查界面、保存及 HTTP 链路，不能替代 WatchConnectivity 配对真机测试或续航测量。
+
+安装到模拟器时保留普通签名，不加 `CODE_SIGNING_ALLOWED=NO`；该选项只用于编译检查。iOS target 使用 `Config/Suiji.entitlements` 配置本 App 的 Keychain 标识，生成器通过签名前缀展开，不与其他 App 共享。模拟器实际使用 Xcode 产出的 `Suiji.app-Simulated.xcent`，不能仅凭 `codesign -d` 输出为空判断未配置。缺少该权限会造成 Keychain `-34018`。
+
+```sh
+xcodebuild -project Suiji.xcodeproj -scheme Suiji \
+  -destination 'platform=iOS Simulator,name=<YOUR_SIMULATOR_NAME>' \
+  -derivedDataPath /tmp/suiji-simulator-build build
+```
 
 测试通用接口时可在 Mac 运行 `python3 scripts/mock_transcription_server.py`，在模拟器填 `http://127.0.0.1:8766/v1`，模型填 `simulator-contract-test`，Key 留空。服务只监听 loopback，15 分钟后自动结束；也可随时 Ctrl+C。`--scenario empty`、`unauthorized`、`rate-limited` 分别返回空结果、401、429，便于验证原声保留与重试。
 
