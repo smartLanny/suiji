@@ -1,0 +1,579 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 60;
+	objects = {
+		9C3CE4D859565A958835356A /* Recording.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "Recording.swift";
+			sourceTree = "<group>";
+		};
+		B23C9E7855735BC1A9243C60 /* RecordingStore.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "RecordingStore.swift";
+			sourceTree = "<group>";
+		};
+		9F0274E82F9A59F091AA3D3B /* TranscriptionClient.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "TranscriptionClient.swift";
+			sourceTree = "<group>";
+		};
+		09573C2B13855DCC8CD0A393 /* SuijiCore */ = {
+			isa = PBXGroup;
+			children = (
+				9C3CE4D859565A958835356A /* Recording.swift */,
+				B23C9E7855735BC1A9243C60 /* RecordingStore.swift */,
+				9F0274E82F9A59F091AA3D3B /* TranscriptionClient.swift */,
+			);
+			path = "SuijiCore";
+			sourceTree = "<group>";
+		};
+		0CFC11E2504F5E3CAD095AD2 /* AudioCapture.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "AudioCapture.swift";
+			sourceTree = "<group>";
+		};
+		D1068007A29258C1B303EBFF /* CompanionSync.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "CompanionSync.swift";
+			sourceTree = "<group>";
+		};
+		B1D20650AD465C86A99B66DB /* CompanionVisual.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "CompanionVisual.swift";
+			sourceTree = "<group>";
+		};
+		A9815029A33A523CA0583675 /* SessionModel.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "SessionModel.swift";
+			sourceTree = "<group>";
+		};
+		6BEA0CA8987F517BBA1D53D0 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				0CFC11E2504F5E3CAD095AD2 /* AudioCapture.swift */,
+				D1068007A29258C1B303EBFF /* CompanionSync.swift */,
+				B1D20650AD465C86A99B66DB /* CompanionVisual.swift */,
+				A9815029A33A523CA0583675 /* SessionModel.swift */,
+			);
+			path = "Shared";
+			sourceTree = "<group>";
+		};
+		A3D7B831B77D58AD95033C1E /* RecordingDetail.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "RecordingDetail.swift";
+			sourceTree = "<group>";
+		};
+		9010F667D2105F3F8153CD3F /* SettingsView.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "SettingsView.swift";
+			sourceTree = "<group>";
+		};
+		55FC6489268A52C4B7858C54 /* SuijiApp.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "SuijiApp.swift";
+			sourceTree = "<group>";
+		};
+		63A05D8EBFCE56D4BCDB4E5D /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				A3D7B831B77D58AD95033C1E /* RecordingDetail.swift */,
+				9010F667D2105F3F8153CD3F /* SettingsView.swift */,
+				55FC6489268A52C4B7858C54 /* SuijiApp.swift */,
+			);
+			path = "iOS";
+			sourceTree = "<group>";
+		};
+		1E3F537EF66E5B93808EDF04 /* SuijiWatchApp.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "SuijiWatchApp.swift";
+			sourceTree = "<group>";
+		};
+		EE6628CCB0D95E9DA564F1F7 /* Watch */ = {
+			isa = PBXGroup;
+			children = (
+				1E3F537EF66E5B93808EDF04 /* SuijiWatchApp.swift */,
+			);
+			path = "Watch";
+			sourceTree = "<group>";
+		};
+		9C58D64071B95CFBAA51D900 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				09573C2B13855DCC8CD0A393 /* SuijiCore */,
+			);
+			path = "Sources";
+			sourceTree = "<group>";
+		};
+		6B365E3F1EB35827A39E2637 /* Info-iOS.plist */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = "Info-iOS.plist";
+			sourceTree = "<group>";
+		};
+		5DA30597B2CE5C16A379B28F /* Info-watchOS.plist */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = "Info-watchOS.plist";
+			sourceTree = "<group>";
+		};
+		73283997E5245950BC580E3E /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				6B365E3F1EB35827A39E2637 /* Info-iOS.plist */,
+				5DA30597B2CE5C16A379B28F /* Info-watchOS.plist */,
+			);
+			path = "Config";
+			sourceTree = "<group>";
+		};
+		52F767B7997259788F1FAC3B /* Assets.xcassets */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = folder.assetcatalog;
+			path = Assets.xcassets;
+			sourceTree = "<group>";
+		};
+		938AC7CE00B2597A9B879EBF /* Suiji.app */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = Suiji.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		CE0C886C18185B2790A122D2 /* SuijiWatch.app */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = SuijiWatch.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		EBDE4D04AB425CA4B26E99CF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				938AC7CE00B2597A9B879EBF /* Suiji.app */,
+				CE0C886C18185B2790A122D2 /* SuijiWatch.app */,
+			);
+			sourceTree = "<group>";
+		};
+		CC0B8083034458A9912DCD41 /* Recording.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 9C3CE4D859565A958835356A /* Recording.swift */;
+		};
+		7956CA64D7D5566D95B43125 /* Recording.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 9C3CE4D859565A958835356A /* Recording.swift */;
+		};
+		6CD0641A49A05175908A090C /* RecordingStore.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = B23C9E7855735BC1A9243C60 /* RecordingStore.swift */;
+		};
+		1EA8D8CC88CD5465B3A6237D /* RecordingStore.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = B23C9E7855735BC1A9243C60 /* RecordingStore.swift */;
+		};
+		2597D0D4165D5535BF90857E /* TranscriptionClient.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 9F0274E82F9A59F091AA3D3B /* TranscriptionClient.swift */;
+		};
+		6517C5214204502FBE947624 /* TranscriptionClient.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 9F0274E82F9A59F091AA3D3B /* TranscriptionClient.swift */;
+		};
+		73FF1659228F517297F3F148 /* AudioCapture.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 0CFC11E2504F5E3CAD095AD2 /* AudioCapture.swift */;
+		};
+		B3261175C5E55164B5A9F7A6 /* AudioCapture.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 0CFC11E2504F5E3CAD095AD2 /* AudioCapture.swift */;
+		};
+		336A4A3615535DA881240E26 /* CompanionSync.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = D1068007A29258C1B303EBFF /* CompanionSync.swift */;
+		};
+		6ADAE345C147508383E6CF02 /* CompanionSync.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = D1068007A29258C1B303EBFF /* CompanionSync.swift */;
+		};
+		F8AF582FF9AA5DF9AF781C80 /* CompanionVisual.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = B1D20650AD465C86A99B66DB /* CompanionVisual.swift */;
+		};
+		89D12CE7AE3C585395834F8D /* CompanionVisual.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = B1D20650AD465C86A99B66DB /* CompanionVisual.swift */;
+		};
+		AEDA5693EB52544FB2286FE5 /* SessionModel.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = A9815029A33A523CA0583675 /* SessionModel.swift */;
+		};
+		3CBE8166F70D583EA3EC6AE2 /* SessionModel.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = A9815029A33A523CA0583675 /* SessionModel.swift */;
+		};
+		72E53D823D3E5D938C461EBB /* RecordingDetail.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = A3D7B831B77D58AD95033C1E /* RecordingDetail.swift */;
+		};
+		A3D5F5FCD5845C47B80BF075 /* SettingsView.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 9010F667D2105F3F8153CD3F /* SettingsView.swift */;
+		};
+		A29F24B6C50B50A4B9E7FADF /* SuijiApp.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 55FC6489268A52C4B7858C54 /* SuijiApp.swift */;
+		};
+		92A089BEE04C5FDEAF6534EB /* SuijiWatchApp.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 1E3F537EF66E5B93808EDF04 /* SuijiWatchApp.swift */;
+		};
+		1F5C802F4E545D63BDC9222D /* Assets.xcassets in Resources */ = {
+			isa = PBXBuildFile;
+			fileRef = 52F767B7997259788F1FAC3B /* Assets.xcassets */;
+		};
+		0E6D3E8DC72F53ED81E9AA03 /* Assets.xcassets in Resources */ = {
+			isa = PBXBuildFile;
+			fileRef = 52F767B7997259788F1FAC3B /* Assets.xcassets */;
+		};
+		FC77E47D39AA56A397D67255 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CC0B8083034458A9912DCD41 /* Recording.swift in Sources */,
+				6CD0641A49A05175908A090C /* RecordingStore.swift in Sources */,
+				2597D0D4165D5535BF90857E /* TranscriptionClient.swift in Sources */,
+				73FF1659228F517297F3F148 /* AudioCapture.swift in Sources */,
+				336A4A3615535DA881240E26 /* CompanionSync.swift in Sources */,
+				F8AF582FF9AA5DF9AF781C80 /* CompanionVisual.swift in Sources */,
+				AEDA5693EB52544FB2286FE5 /* SessionModel.swift in Sources */,
+				72E53D823D3E5D938C461EBB /* RecordingDetail.swift in Sources */,
+				A3D5F5FCD5845C47B80BF075 /* SettingsView.swift in Sources */,
+				A29F24B6C50B50A4B9E7FADF /* SuijiApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42C68D034B6D59A294950ED7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7956CA64D7D5566D95B43125 /* Recording.swift in Sources */,
+				1EA8D8CC88CD5465B3A6237D /* RecordingStore.swift in Sources */,
+				6517C5214204502FBE947624 /* TranscriptionClient.swift in Sources */,
+				B3261175C5E55164B5A9F7A6 /* AudioCapture.swift in Sources */,
+				6ADAE345C147508383E6CF02 /* CompanionSync.swift in Sources */,
+				89D12CE7AE3C585395834F8D /* CompanionVisual.swift in Sources */,
+				3CBE8166F70D583EA3EC6AE2 /* SessionModel.swift in Sources */,
+				92A089BEE04C5FDEAF6534EB /* SuijiWatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DFC13BCF6D4A5054875AF08B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		64E834BDC0CC5E7D939A2257 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2C7C9403F8C55929BD0DD0BD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F5C802F4E545D63BDC9222D /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA8BFE8BDFC958939DF1F1C7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0E6D3E8DC72F53ED81E9AA03 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3D6E458D6E6A5729BB327DE9 /* SuijiWatch.app in Embed Watch Content */ = {
+			isa = PBXBuildFile;
+			settings = { ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy,); };
+			fileRef = CE0C886C18185B2790A122D2 /* SuijiWatch.app */;
+		};
+		D28F8568DA23526097E777CF /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				3D6E458D6E6A5729BB327DE9 /* SuijiWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B3E6F1CCA5EC59A9B3F3D5D0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4A4D857A462151E6AC39529F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 086434EF14BB54128948DBCB;
+			remoteInfo = SuijiWatch;
+		};
+		0ACF2A2F5BA050E8AFF9714F /* SuijiWatch */ = {
+			isa = PBXTargetDependency;
+			target = 086434EF14BB54128948DBCB /* SuijiWatch */;
+			targetProxy = B3E6F1CCA5EC59A9B3F3D5D0 /* PBXContainerItemProxy */;
+		};
+		77328A7ACA6650CB85F3E533 /* Debug Project */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 27.0;
+			};
+			name = Debug;
+		};
+		5018A22D5C5350F182C0B196 /* Release Project */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 27.0;
+			};
+			name = Release;
+		};
+		26BC4677F19F5597A1D84568 /* Build configuration list for Project */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				77328A7ACA6650CB85F3E533 /* Debug */,
+				5018A22D5C5350F182C0B196 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B5BE50E9F9265E5FB31BA1A7 /* Debug Suiji */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 73966X6569;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				INFOPLIST_FILE = Config/Info-iOS.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lann.suiji;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		CE539393BFC654E7971976EC /* Release Suiji */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 73966X6569;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				INFOPLIST_FILE = Config/Info-iOS.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lann.suiji;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		23901BB633A058A49213F16A /* Build configuration list for Suiji */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B5BE50E9F9265E5FB31BA1A7 /* Debug */,
+				CE539393BFC654E7971976EC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9A7CF482DC4352F7BCAD05D3 /* Debug SuijiWatch */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 73966X6569;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				INFOPLIST_FILE = Config/Info-watchOS.plist;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.lann.suiji;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lann.suiji.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 27.0;
+			};
+			name = Debug;
+		};
+		C4BB9F65F0C8506B8B20A258 /* Release SuijiWatch */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 73966X6569;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				INFOPLIST_FILE = Config/Info-watchOS.plist;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.lann.suiji;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lann.suiji.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 27.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		55232CBAB0EC50909E0F63FB /* Build configuration list for SuijiWatch */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9A7CF482DC4352F7BCAD05D3 /* Debug */,
+				C4BB9F65F0C8506B8B20A258 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4AA0EDB1EF775A06939CADE8 /* Suiji */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 23901BB633A058A49213F16A /* Build configuration list for Suiji */;
+			buildPhases = (
+				FC77E47D39AA56A397D67255 /* Sources */,
+				DFC13BCF6D4A5054875AF08B /* Frameworks */,
+				2C7C9403F8C55929BD0DD0BD /* Resources */,
+				D28F8568DA23526097E777CF /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0ACF2A2F5BA050E8AFF9714F /* SuijiWatch */,
+			);
+			name = Suiji;
+			productName = Suiji;
+			productReference = 938AC7CE00B2597A9B879EBF /* Suiji.app */;
+			productType = "com.apple.product-type.application";
+		};
+		086434EF14BB54128948DBCB /* SuijiWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 55232CBAB0EC50909E0F63FB /* Build configuration list for SuijiWatch */;
+			buildPhases = (
+				42C68D034B6D59A294950ED7 /* Sources */,
+				64E834BDC0CC5E7D939A2257 /* Frameworks */,
+				AA8BFE8BDFC958939DF1F1C7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SuijiWatch;
+			productName = SuijiWatch;
+			productReference = CE0C886C18185B2790A122D2 /* SuijiWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		41589AEA32605242866CC6D8 /*  */ = {
+			isa = PBXGroup;
+			children = (
+				9C58D64071B95CFBAA51D900 /* Sources */,
+				6BEA0CA8987F517BBA1D53D0 /* Shared */,
+				63A05D8EBFCE56D4BCDB4E5D /* iOS */,
+				EE6628CCB0D95E9DA564F1F7 /* Watch */,
+				73283997E5245950BC580E3E /* Config */,
+				52F767B7997259788F1FAC3B /* Assets.xcassets */,
+				EBDE4D04AB425CA4B26E99CF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4A4D857A462151E6AC39529F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					4AA0EDB1EF775A06939CADE8 = { CreatedOnToolsVersion = 27.0; ProvisioningStyle = Automatic; };
+					086434EF14BB54128948DBCB = { CreatedOnToolsVersion = 27.0; ProvisioningStyle = Automatic; };
+				};
+			};
+			buildConfigurationList = 26BC4677F19F5597A1D84568 /* Build configuration list for Project object */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 41589AEA32605242866CC6D8 /* Main group */;
+			productRefGroup = EBDE4D04AB425CA4B26E99CF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4AA0EDB1EF775A06939CADE8 /* Suiji */,
+				086434EF14BB54128948DBCB /* SuijiWatch */,
+			);
+		};
+	};
+	rootObject = 4A4D857A462151E6AC39529F /* Project object */;
+}

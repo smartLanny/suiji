@@ -1,0 +1,14 @@
+name: Core tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test persistence, retention and transcription contract
+        run: swift test --scratch-path "$RUNNER_TEMP/suiji-tests"
