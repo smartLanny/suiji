@@ -19,13 +19,14 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
     private var recorder: AVAudioRecorder?
     private var recordingID: UUID?
     private var lastKnownSegmentDuration: TimeInterval = 0
+    private var progressMonitor = RecordingProgressMonitor()
     private var accumulatedDuration: TimeInterval = 0
     private var segmentCount = 0
     private var cancelPendingStart = false
     private var meterTimer: Timer?
     private var lastCapacityCheck = Date.distantPast
     private var notificationTokens: [NSObjectProtocol] = []
-    private let segmentDuration: TimeInterval = 5 * 60
+    private var segmentDuration: TimeInterval = 5 * 60
     private let minimumFreeBytes: Int64 = 24 * 1024 * 1024
 
     var onSaved: ((Recording) -> Void)?
@@ -64,7 +65,6 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         do {
             try checkFreeSpace()
             try audioSession.setCategory(.record, mode: .default, options: [])
-            try audioSession.setActive(true)
             activeIntent = intent
             self.mode = mode
             accumulatedDuration = 0
@@ -102,6 +102,7 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     func noteLifecycle(scenePhase: String, isLuminanceReduced: Bool) {
         diagnostics.noteLifecycle(scenePhase: scenePhase, isLuminanceReduced: isLuminanceReduced)
+        if scenePhase == "active" { refreshMeterAndCapacity() }
     }
 
     func discardCurrentRecording() throws {
@@ -252,7 +253,15 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
     }
 
     private func beginSegment() throws {
+        segmentDuration = diagnostics.testSegmentDuration ?? 5 * 60
         try checkFreeSpace()
+        do {
+            try audioSession.setActive(true)
+            diagnostics.record("session_activation", details: ["outcome": "success"])
+        } catch {
+            diagnostics.record("session_activation", details: ["outcome": "failed", "code": String((error as NSError).code)])
+            throw error
+        }
         let recording = try store.begin(source: source, intent: activeIntent, mode: mode)
         recordingID = recording.id
 
@@ -273,8 +282,9 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
             recorder = nextRecorder
             segmentCount += 1
             lastKnownSegmentDuration = 0
+            progressMonitor.reset(at: ProcessInfo.processInfo.systemUptime)
             lastCapacityCheck = Date()
-            diagnostics.record("segment_begin", details: ["segmentUUID": recording.id.uuidString])
+            diagnostics.record("segment_begin", details: ["segmentUUID": recording.id.uuidString, "segmentDurationSeconds": String(segmentDuration)])
         } catch {
             if let recordingID {
                 do {
@@ -305,6 +315,11 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let runningDuration = min(segmentDuration, max(0, recorder.currentTime))
         lastKnownSegmentDuration = max(lastKnownSegmentDuration, runningDuration)
         elapsed = accumulatedDuration + lastKnownSegmentDuration
+        if progressMonitor.observe(audioTime: runningDuration, at: ProcessInfo.processInfo.systemUptime) {
+            diagnostics.record("progress_stalled", details: ["audioTime": String(runningDuration)])
+            stopWithError("录音没有继续收音，已停止并保存。请重新开始。", interrupted: true)
+            return
+        }
 
         guard Date().timeIntervalSince(lastCapacityCheck) >= 15 else { return }
         lastCapacityCheck = Date()
@@ -378,6 +393,15 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
     }
 
     private func observeAudioInterruptions() {
+        let activation = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.didBecomeActiveNotification,
+            object: audioSession,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.diagnostics.record("session_active") }
+        }
+        notificationTokens.append(activation)
+
         let interruption = NotificationCenter.default.addObserver(
             forName: AVAudioSession.didBecomeInactiveNotification,
             object: audioSession,
@@ -401,8 +425,10 @@ final class AudioCapture: NSObject, ObservableObject, AVAudioRecorderDelegate {
     }
 
     private func handleDeactivation(_ notification: Notification) {
-        guard isRecording || recordingID != nil else { return }
         let context = notification.userInfo?[AVAudioSession.deactivationContextKey] as? AVAudioSession.DeactivationContext
+        diagnostics.record("session_inactive", details: ["source": context.map { String($0.source.rawValue) } ?? "unknown",
+                                                        "reason": context?.interruptionContext.map { String($0.reason.rawValue) } ?? "none"])
+        guard isRecording || recordingID != nil else { return }
         guard context?.source != .app else { return }
         let reason = context?.interruptionContext?.reason
         let message: String

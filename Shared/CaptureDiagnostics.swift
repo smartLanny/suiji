@@ -152,7 +152,7 @@ final class CaptureDiagnostics {
     }
 
     func startIfRequested(sample: @escaping () -> CaptureDiagnosticSnapshot?) {
-        guard document == nil, let minutes = requestedMinutes(), (1...1_440).contains(minutes) else { return }
+        guard document == nil, let minutes = requestedInteger("SUIJI_DIAGNOSTICS_MINUTES"), (1...1_440).contains(minutes) else { return }
         let started = Date()
         let expires = started.addingTimeInterval(TimeInterval(minutes) * 60)
         deadline = expires
@@ -258,8 +258,14 @@ final class CaptureDiagnostics {
         #endif
     }
 
-    private func requestedMinutes() -> Int? {
-        let key = "SUIJI_DIAGNOSTICS_MINUTES"
+    var testSegmentDuration: TimeInterval? {
+        guard isActive, let deadline, Date() < deadline,
+              let seconds = requestedInteger("SUIJI_TEST_SEGMENT_SECONDS"),
+              (10...300).contains(seconds) else { return nil }
+        return TimeInterval(seconds)
+    }
+
+    private func requestedInteger(_ key: String) -> Int? {
         if let value = ProcessInfo.processInfo.environment[key], let minutes = Int(value) { return minutes }
         let arguments = ProcessInfo.processInfo.arguments
         for (index, argument) in arguments.enumerated() {
