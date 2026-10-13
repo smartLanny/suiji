@@ -11,6 +11,7 @@ final class CompanionSync: NSObject, ObservableObject, WCSessionDelegate {
     var onChange: (() -> Void)?
 
     private nonisolated let store: RecordingStore
+    private let diagnostics: CaptureDiagnostics
     private let session: WCSession
     private let queuedKey = "suiji.watch.pendingFileTransfers"
     private let retryDelay: TimeInterval = 60
@@ -19,6 +20,9 @@ final class CompanionSync: NSObject, ObservableObject, WCSessionDelegate {
     private var retryAttempt = 0
     #if os(watchOS)
     private var pendingObservation: NSKeyValueObservation?
+    private var receiptQueryInFlight = false
+    private var lastReceiptQuery = Date.distantPast
+    private var receiptQueryOffset = 0
     private static var backgroundTasks: [WKWatchConnectivityRefreshBackgroundTask] = []
 
     static func registerBackgroundTask(_ task: WKWatchConnectivityRefreshBackgroundTask) {
@@ -48,8 +52,9 @@ final class CompanionSync: NSObject, ObservableObject, WCSessionDelegate {
     }
     #endif
 
-    init(store: RecordingStore) {
+    init(store: RecordingStore, diagnostics: CaptureDiagnostics) {
         self.store = store
+        self.diagnostics = diagnostics
         self.session = WCSession.default
         super.init()
         #if os(watchOS)
@@ -79,6 +84,8 @@ final class CompanionSync: NSObject, ObservableObject, WCSessionDelegate {
             status = "录音已保存在手表，等待手机接收。"
             return
         }
+
+        reconcileReceiptsIfReachable()
 
         let outstanding = Set(session.outstandingFileTransfers.compactMap { transfer -> String? in
             transfer.file.metadata?["recordingID"] as? String
@@ -119,7 +126,9 @@ final class CompanionSync: NSObject, ObservableObject, WCSessionDelegate {
         } else {
             status = "录音已保存在手表，等待手机接收。"
         }
-        if !candidates.isEmpty { scheduleRetry(after: retryDelay) }
+        if store.all().contains(where: { $0.source == .watch && $0.audioDeletedAt == nil && $0.captureState != .recording }) {
+            scheduleRetry(after: retryDelay)
+        }
         #else
         status = "手机已准备好接收手表录音。"
         #endif
@@ -138,6 +147,90 @@ final class CompanionSync: NSObject, ObservableObject, WCSessionDelegate {
         transfers.removeValue(forKey: id)
         saveQueuedTransfers(transfers)
     }
+
+    #if os(watchOS)
+    private func reconcileReceiptsIfReachable() {
+        guard session.isReachable, !receiptQueryInFlight,
+              Date().timeIntervalSince(lastReceiptQuery) >= 5 else { return }
+        let pendingIDs = store.all().filter {
+            $0.source == .watch && $0.audioDeletedAt == nil && $0.captureState != .recording
+        }.map(\.id)
+        guard !pendingIDs.isEmpty else { return }
+        let start = receiptQueryOffset % pendingIDs.count
+        let batch = (0..<min(50, pendingIDs.count)).map { pendingIDs[(start + $0) % pendingIDs.count] }
+        let requestedIDs = Set(batch)
+        receiptQueryOffset = start + batch.count
+        receiptQueryInFlight = true
+        lastReceiptQuery = Date()
+        diagnostics.record("receipt_query_started", details: ["requestedCount": String(requestedIDs.count)])
+        session.sendMessage(["type": "recordingReceiptQuery", "recordingIDs": requestedIDs.map(\.uuidString)],
+                            replyHandler: { [weak self] response in
+            let type = response["type"] as? String
+            let confirmed = (response["recordingIDs"] as? [String]).map { Set($0.compactMap(UUID.init(uuidString:))) }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.receiptQueryInFlight = false
+                guard type == "recordingReceiptStatus", let confirmed else {
+                    self.diagnostics.record("receipt_query_failed", details: ["kind": "invalid_reply"])
+                    return
+                }
+                let accepted = confirmed.intersection(requestedIDs)
+                var applied = 0
+                for id in accepted {
+                    do {
+                        try self.store.acceptPhoneReceipt(id: id)
+                        self.didAcceptReceipt(id.uuidString)
+                        applied += 1
+                    } catch {
+                        self.status = "手机已确认保存，手表副本处理失败：\(error.localizedDescription)"
+                        self.scheduleRetry(after: self.retryDelay)
+                    }
+                }
+                self.diagnostics.record("receipt_query_completed", details: ["confirmedCount": String(accepted.count),
+                                                                              "appliedCount": String(applied)])
+            }
+        }, errorHandler: { [weak self] error in
+            let code = (error as NSError).code
+            Task { @MainActor [weak self] in
+                self?.receiptQueryInFlight = false
+                self?.diagnostics.record("receipt_query_failed", details: ["code": String(code)])
+            }
+        })
+    }
+
+    private func didAcceptReceipt(_ id: String) {
+        removeQueuedTransfer(id)
+        session.outstandingFileTransfers.filter { $0.file.metadata?["recordingID"] as? String == id }.forEach { $0.cancel() }
+        retryAttempt = 0
+        status = "手机已收到录音，手表副本已释放。"
+        onChange?()
+        if store.all().contains(where: { $0.source == .watch && $0.audioDeletedAt == nil && $0.captureState != .recording }) {
+            scheduleRetry(after: retryDelay)
+        }
+    }
+    #endif
+
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        Task { @MainActor [weak self] in self?.enqueuePending() }
+    }
+
+    #if os(iOS)
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any],
+                            replyHandler: @escaping ([String: Any]) -> Void) {
+        guard message["type"] as? String == "recordingReceiptQuery",
+              let values = message["recordingIDs"] as? [String], values.count <= 50 else {
+            replyHandler(["type": "recordingReceiptStatus", "recordingIDs": [String]()])
+            return
+        }
+        let ids = values.compactMap(UUID.init(uuidString:))
+        let confirmed = store.confirmedWatchReceiptIDs(for: ids)
+        replyHandler(["type": "recordingReceiptStatus", "recordingIDs": confirmed.map(\.uuidString)])
+        Task { @MainActor [weak self] in
+            self?.diagnostics.record("receipt_query_answered", details: ["requestedCount": String(ids.count),
+                                                                       "confirmedCount": String(confirmed.count)])
+        }
+    }
+    #endif
 
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         let message = error?.localizedDescription
@@ -201,17 +294,11 @@ final class CompanionSync: NSObject, ObservableObject, WCSessionDelegate {
 
         #if os(watchOS)
         do {
-            try store.acknowledge(id: id)
-            try store.deleteDeliveredWatchAudio(id: id)
+            try store.acceptPhoneReceipt(id: id)
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.removeQueuedTransfer(idString)
-                self.retryAttempt = 0
-                self.status = "手机已收到录音，手表副本已释放。"
-                self.onChange?()
-                if !self.store.all().filter({ $0.source == .watch && $0.phoneReceivedAt == nil && $0.audioDeletedAt == nil && $0.captureState != .recording }).isEmpty {
-                    self.scheduleRetry(after: self.retryDelay)
-                }
+                self.didAcceptReceipt(idString)
+                self.diagnostics.record("receipt_received", details: ["source": "user_info"])
             }
         } catch {
             let message = error.localizedDescription
@@ -230,6 +317,10 @@ final class CompanionSync: NSObject, ObservableObject, WCSessionDelegate {
         let message = error?.localizedDescription
         Task { @MainActor [weak self] in
             guard let self else { return }
+            if let recordingID = UUID(uuidString: id), self.store.recording(id: recordingID)?.phoneReceivedAt != nil {
+                self.removeQueuedTransfer(id)
+                return
+            }
             if let message {
                 self.removeQueuedTransfer(id)
                 self.status = "同步暂时失败，原声仍保存在手表：\(message)"

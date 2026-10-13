@@ -39,6 +39,115 @@ final class RecordingStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: reopened.audioURL(for: first)).count, 12)
     }
 
+    func testPersistedWatchReceiptCanBeConfirmedAfterStoreReopens() throws {
+        let clip = fixture()
+        let transfer = directory.appendingPathComponent("receipt.m4a")
+        try Data(repeating: 2, count: 12).write(to: transfer)
+        _ = try store.importClip(from: transfer, envelope: ClipEnvelope(recording: clip))
+        let reopened = try RecordingStore(root: directory)
+        let before = try XCTUnwrap(reopened.recording(id: clip.id))
+
+        let confirmed = reopened.confirmedWatchReceiptIDs(for: [clip.id, clip.id])
+
+        XCTAssertEqual(confirmed, [clip.id])
+        XCTAssertEqual(reopened.recording(id: clip.id), before)
+    }
+
+    func testConfirmedWatchReceiptsDeduplicateAndPreserveRequestOrder() throws {
+        let first = try makeCapture(source: .watch)
+        let second = try makeCapture(source: .watch)
+        try store.acknowledge(id: first.id)
+        try store.acknowledge(id: second.id)
+
+        XCTAssertEqual(store.confirmedWatchReceiptIDs(for: [second.id, first.id, second.id]), [second.id, first.id])
+    }
+
+    func testUnknownRecordingAndPhoneEntriesCannotConfirmAsWatchReceipts() throws {
+        let inProgress = try store.begin(source: .watch)
+        try store.acknowledge(id: inProgress.id)
+        let phone = try makeCapture(source: .phone)
+        try store.acknowledge(id: phone.id)
+
+        XCTAssertEqual(store.confirmedWatchReceiptIDs(for: [UUID(), inProgress.id, phone.id]), [])
+    }
+
+    func testMissingOrDamagedWatchAudioCannotConfirmAsReceipt() throws {
+        let missing = try makeCapture(source: .watch)
+        let damaged = try makeCapture(source: .watch)
+        try store.acknowledge(id: missing.id)
+        try store.acknowledge(id: damaged.id)
+        try FileManager.default.removeItem(at: store.audioURL(for: missing))
+        try Data(repeating: 4, count: 11).write(to: store.audioURL(for: damaged))
+
+        XCTAssertEqual(store.confirmedWatchReceiptIDs(for: [missing.id, damaged.id]), [])
+    }
+
+    func testLegitimatelyPurgedWatchAudioCanConfirmWithCompleteTranscript() throws {
+        let clip = try makeCapture(source: .watch)
+        try store.acknowledge(id: clip.id)
+        try store.completeTranscription(id: clip.id, text: "  已完整转写的内容  ")
+        XCTAssertEqual(try store.cleanup(policy: RetentionPolicy(), now: clip.recordedAt.addingTimeInterval(31 * 86_400)), 1)
+        let reopened = try RecordingStore(root: directory)
+
+        XCTAssertEqual(reopened.confirmedWatchReceiptIDs(for: [clip.id]), [clip.id])
+    }
+
+    func testMissingAudioWithDeletionMarkerButNoCompleteTranscriptCannotConfirm() throws {
+        let clip = try makeCapture(source: .watch)
+        try store.acknowledge(id: clip.id)
+        try store.deleteDeliveredWatchAudio(id: clip.id)
+
+        XCTAssertEqual(store.confirmedWatchReceiptIDs(for: [clip.id]), [])
+    }
+
+    func testAcceptingPhoneReceiptPersistsAckBeforeDeletingWatchAudioAndIsIdempotent() throws {
+        let clip = try makeCapture(source: .watch)
+        let audioURL = store.audioURL(for: clip)
+
+        try store.acceptPhoneReceipt(id: clip.id)
+
+        let firstReceipt = try XCTUnwrap(store.recording(id: clip.id))
+        XCTAssertNotNil(firstReceipt.phoneReceivedAt)
+        XCTAssertNotNil(firstReceipt.audioDeletedAt)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
+        try store.acceptPhoneReceipt(id: clip.id)
+        XCTAssertEqual(store.recording(id: clip.id)?.phoneReceivedAt, firstReceipt.phoneReceivedAt)
+        XCTAssertEqual(store.recording(id: clip.id)?.audioDeletedAt, firstReceipt.audioDeletedAt)
+    }
+
+    func testAcceptPhoneReceiptRejectsActiveAndPhoneRecordingsWithoutDeletingAudio() throws {
+        let active = try store.begin(source: .watch)
+        let activeURL = store.audioURL(for: active)
+        try Data(repeating: 3, count: 12).write(to: activeURL)
+        let phone = try makeCapture(source: .phone)
+        let phoneURL = store.audioURL(for: phone)
+
+        XCTAssertThrowsError(try store.acceptPhoneReceipt(id: active.id)) { error in
+            XCTAssertEqual(error as? StoreError, .invalidDelivery)
+        }
+        XCTAssertThrowsError(try store.acceptPhoneReceipt(id: phone.id)) { error in
+            XCTAssertEqual(error as? StoreError, .invalidDelivery)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: activeURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: phoneURL.path))
+        XCTAssertNil(store.recording(id: active.id)?.phoneReceivedAt)
+        XCTAssertNil(store.recording(id: phone.id)?.phoneReceivedAt)
+    }
+
+    func testFailedReceiptWriteKeepsWatchAudioAndDoesNotDelete() throws {
+        let clip = try makeCapture(source: .watch)
+        let audioURL = store.audioURL(for: clip)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
+
+        XCTAssertThrowsError(try store.acceptPhoneReceipt(id: clip.id))
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: audioURL.path))
+        XCTAssertNil(store.recording(id: clip.id)?.phoneReceivedAt)
+        XCTAssertNil(store.recording(id: clip.id)?.audioDeletedAt)
+    }
+
     func testIncompleteTransferDoesNotCreateReceipt() throws {
         let clip = fixture()
         let transfer = directory.appendingPathComponent("transfer.m4a")

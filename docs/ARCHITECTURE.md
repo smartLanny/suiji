@@ -30,7 +30,8 @@ Watch 麦克风 → 手表 Audio/UUID.m4a → transferFile
 
 - 采集状态：`recording → ready`；系统中断或意外结束恢复为 `interrupted`，可读的部分仍可转写。中断后由用户重新开始录音。
 - 转写状态：`pending → transcribing → completed / failed`。只有非空文字持久保存后才算完成；失败保留原声并允许重试。重启时把遗留的 `transcribing` 恢复为 `pending`；任务取消也回到待处理。
-- 同步状态独立于转写。`transferFile` 排队或系统传输完成不等于手机已保存。手机完成导入与 manifest 保存后才发 `recordingReceipt`；Watch 收到回执并写入 `phoneReceivedAt` 后才释放副本。系统决定传输时机，未承诺到达时延；首次短录和标记已验证配对实机闭环，后台多轮与离线重传仍待测。
+- 同步状态独立于转写。`transferFile` 排队或系统传输完成不等于手机已保存。手机完成导入与 manifest 保存后才发 `recordingReceipt`；Watch 收到回执并写入 `phoneReceivedAt` 后才释放副本。系统决定传输时机，未承诺到达时延；实际后台、离线及回执恢复结果见 [验收记录](ACCEPTANCE.md)。
+- 回执恢复：Watch 在激活、回到前台、连接恢复及有积压时，主动请求手机核对记录 ID；每批至多 50 个，轮换处理，单次在途。手机只确认已持久导入、文件字节数正确的 Watch 记录，或已按留存规则清理且完整转写仍存在的记录。Watch 只接受本次所问的 ID，先持久写回执，再释放音频；未拿到确认或回执写盘失败时保留副本并继续重试。原有 `transferUserInfo` 回执路径保留。
 - ASR 目前使用普通 URLSession 上传，前台串行处理，申请有限的 UIKit 后台收尾时间；到期取消，下一次激活续处理。没有后台 URLSession 或 BGProcessingTask，也没有 App 被终止后持续转写的保证。
 
 ## 留存与文件保护

@@ -31,7 +31,7 @@ xcrun devicectl device process launch \
 
 日志在 `Library/Application Support/Suiji/capture-diagnostics.json`。内容包括真实 `recorder.currentTime/isRecording`、逻辑录音状态、估计计时、当前分段、分段事件、场景/亮度降低状态、电池与充电状态、待传数量。未知量写 null，不把未知电量当 0。诊断期间临时开启电池监测，结束时恢复；编码和原子写盘在串行后台队列中执行，待写快照合并为最新一份，不在下一段启动前等待磁盘。
 
-两端均记录 WatchConnectivity 激活/可达状态、待传文件数及 `watchOutstandingReceiptTransfers`（当前端出站录音回执数量）。后者不包含回执内容；0 只代表当前没有待发项，不能据此认定对端已持久保存回执。收到与释放仍以 Watch 索引中的实际字段核对。
+两端均记录 WatchConnectivity 激活/可达状态、待传文件数及 `watchOutstandingReceiptTransfers`（当前端出站录音回执数量）。后者不包含回执内容；0 只代表当前没有待发项，不能据此认定对端已持久保存回执。收到与释放仍以 Watch 索引中的实际字段核对。主动回执核对记录 `receipt_query_started/completed/failed`，手机记录 `receipt_query_answered`，旧回执路径记录 `receipt_received`；只含计数、来源或错误码，不含录音 ID 与内容。恢复验收应核对同批 ID、手机数量和 Watch 实际音频目录，不能只看消息成功回调。
 
 不记录录音内容、转写、密钥、联系人或设备序列号。原始诊断和索引仍可能包含记录 ID 与时间，只保留在本机；不要提交 Git。
 
@@ -76,7 +76,7 @@ python3 scripts/capture_soak.py report \
 - 少了诊断样本不直接判停止；采样显示 recorder=false 也只代表该时刻，应结合中断与文件事件。
 - 报告的 `recorderClockStall` 只提示实际音频时钟不增长的疑点：同一片段、录音状态均为真，至少三次有效采样跨 120 秒以上、相邻间隔不超过 150 秒，音频时间范围不超过 0.05 秒。换段、缺值、时间倒退或采样断档会切断观察区间；前后台变化本身不触发停滞。只输出聚合，不输出片段 ID；零候选不代表连续录音通过。
 - 充电/未知充电状态混入时不计算耗电速率；不足 60 分钟只报起止电量与净变化。两个小时仍是短期观测，不能当 24 小时保证。
-- 当前采样和部分报告已经实现，完整 S9 断连与电量试验尚未通过。真实设备进展统一写入 [验收记录](ACCEPTANCE.md)。
+- 当前采样和部分报告已经实现；S9 短时断连录音、恢复导入与回执释放已通过，长时耗电试验仍未通过。真实设备进展统一写入 [验收记录](ACCEPTANCE.md)。
 
 ## 分轮保存与电量窗口
 

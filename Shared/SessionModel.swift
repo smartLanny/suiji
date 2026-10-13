@@ -33,7 +33,7 @@ final class SessionModel: ObservableObject {
         #else
         capture = AudioCapture(store: store, source: .phone, diagnostics: diagnostics)
         #endif
-        companion = CompanionSync(store: store)
+        companion = CompanionSync(store: store, diagnostics: diagnostics)
         if let data = UserDefaults.standard.data(forKey: "retention"),
            let policy = try? JSONDecoder().decode(RetentionPolicy.self, from: data) {
             retention = policy

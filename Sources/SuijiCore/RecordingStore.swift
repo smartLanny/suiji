@@ -135,6 +135,43 @@ final class RecordingStore: @unchecked Sendable {
         try update(id: id) { $0.phoneReceivedAt = at; $0.lastError = nil }
     }
 
+    func confirmedWatchReceiptIDs(for ids: [UUID]) -> [UUID] {
+        lock.lock(); defer { lock.unlock() }
+        var seen = Set<UUID>()
+        var confirmed: [UUID] = []
+        for id in ids where seen.insert(id).inserted {
+            guard let recording = manifest.recordings.first(where: { $0.id == id }),
+                  recording.source == .watch,
+                  recording.captureState != .recording,
+                  recording.phoneReceivedAt != nil else { continue }
+
+            let url = audioURL(for: recording)
+            if FileManager.default.fileExists(atPath: url.path) {
+                guard recording.byteCount > 0,
+                      let size = try? sizeOfFile(url), size == recording.byteCount else { continue }
+            } else {
+                guard recording.audioDeletedAt != nil,
+                      recording.transcriptionState == .completed,
+                      let transcript = recording.transcript,
+                      !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            }
+            confirmed.append(id)
+        }
+        return confirmed
+    }
+
+    func acceptPhoneReceipt(id: UUID) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard let recording = recording(id: id) else { throw StoreError.missingRecording }
+        guard recording.source == .watch, recording.captureState != .recording else {
+            throw StoreError.invalidDelivery
+        }
+        if recording.phoneReceivedAt == nil { try acknowledge(id: id) }
+        guard let updated = self.recording(id: id) else { throw StoreError.missingRecording }
+        guard updated.audioDeletedAt == nil else { return }
+        try deleteDeliveredWatchAudio(id: id)
+    }
+
     func deleteDeliveredWatchAudio(id: UUID) throws {
         lock.lock(); defer { lock.unlock() }
         guard let recording = recording(id: id), recording.source == .watch,
