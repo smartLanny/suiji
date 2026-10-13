@@ -1,10 +1,10 @@
 import Foundation
 import AVFAudio
+import WatchConnectivity
 #if os(iOS)
 import UIKit
 #elseif os(watchOS)
 import WatchKit
-import WatchConnectivity
 #endif
 
 struct CaptureDiagnosticSnapshot: Sendable {
@@ -49,12 +49,14 @@ private struct CaptureDiagnosticSample: Codable, Sendable {
     let watchConnectivityReachable: Bool?
     let watchConnectivityActivationState: String?
     let watchOutstandingFileTransfers: Int?
+    let watchOutstandingReceiptTransfers: Int?
 
     enum CodingKeys: String, CodingKey {
         case timestamp, recorderCurrentTime, recorderIsRecording, meterLevel, logicalIsRecording
         case elapsedEstimate, currentSegmentUUID, accumulatedDuration, batteryLevel
         case batteryState, lowPowerMode, thermalState, scenePhase, isLuminanceReduced
         case watchConnectivityReachable, watchConnectivityActivationState, watchOutstandingFileTransfers
+        case watchOutstandingReceiptTransfers
     }
 
     func encode(to encoder: Encoder) throws {
@@ -76,6 +78,7 @@ private struct CaptureDiagnosticSample: Codable, Sendable {
         try values.encode(watchConnectivityReachable, forKey: .watchConnectivityReachable)
         try values.encode(watchConnectivityActivationState, forKey: .watchConnectivityActivationState)
         try values.encode(watchOutstandingFileTransfers, forKey: .watchOutstandingFileTransfers)
+        try values.encode(watchOutstandingReceiptTransfers, forKey: .watchOutstandingReceiptTransfers)
     }
 }
 
@@ -223,7 +226,8 @@ final class CaptureDiagnostics {
                                         isLuminanceReduced: previousLuminanceReduced,
                                         watchConnectivityReachable: environment.watchConnectivityReachable,
                                         watchConnectivityActivationState: environment.watchConnectivityActivationState,
-                                        watchOutstandingFileTransfers: environment.watchOutstandingFileTransfers))
+                                        watchOutstandingFileTransfers: environment.watchOutstandingFileTransfers,
+                                        watchOutstandingReceiptTransfers: environment.watchOutstandingReceiptTransfers))
         self.document = document
         persist()
     }
@@ -302,18 +306,7 @@ final class CaptureDiagnostics {
         #endif
     }
 
-    private func deviceEnvironment() -> (batteryLevel: Double?, batteryState: String?, lowPowerMode: Bool?, thermalState: String?, watchConnectivityReachable: Bool?, watchConnectivityActivationState: String?, watchOutstandingFileTransfers: Int?) {
-        #if os(iOS)
-        let device = UIDevice.current
-        let level = Double(device.batteryLevel)
-        return ((0...1).contains(level) ? level : nil,
-                batteryState(),
-                ProcessInfo.processInfo.isLowPowerModeEnabled,
-                thermalState(),
-                nil, nil, nil)
-        #elseif os(watchOS)
-        let device = WKInterfaceDevice.current()
-        let level = Double(device.batteryLevel)
+    private func deviceEnvironment() -> (batteryLevel: Double?, batteryState: String?, lowPowerMode: Bool?, thermalState: String?, watchConnectivityReachable: Bool?, watchConnectivityActivationState: String?, watchOutstandingFileTransfers: Int?, watchOutstandingReceiptTransfers: Int?) {
         let session = WCSession.default
         let activationState: String?
         switch session.activationState {
@@ -322,15 +315,33 @@ final class CaptureDiagnostics {
         case .activated: activationState = "activated"
         @unknown default: activationState = nil
         }
+        let receiptCount = WCSession.isSupported() ? session.outstandingUserInfoTransfers.filter {
+            $0.userInfo["type"] as? String == "recordingReceipt"
+        }.count : nil
+        #if os(iOS)
+        let device = UIDevice.current
+        let level = Double(device.batteryLevel)
+        return ((0...1).contains(level) ? level : nil,
+                batteryState(),
+                ProcessInfo.processInfo.isLowPowerModeEnabled,
+                thermalState(),
+                WCSession.isSupported() ? session.isReachable : nil,
+                WCSession.isSupported() ? activationState : nil,
+                WCSession.isSupported() ? session.outstandingFileTransfers.count : nil,
+                receiptCount)
+        #elseif os(watchOS)
+        let device = WKInterfaceDevice.current()
+        let level = Double(device.batteryLevel)
         return ((0...1).contains(level) ? level : nil,
                 batteryState(),
                 nil,
                 thermalState(),
                 WCSession.isSupported() ? session.isReachable : nil,
                 WCSession.isSupported() ? activationState : nil,
-                WCSession.isSupported() ? session.outstandingFileTransfers.count : nil)
+                WCSession.isSupported() ? session.outstandingFileTransfers.count : nil,
+                receiptCount)
         #else
-        return (nil, nil, nil, nil, nil, nil, nil)
+        return (nil, nil, nil, nil, nil, nil, nil, nil)
         #endif
     }
 
