@@ -1,13 +1,14 @@
 # 原生架构
 
-本文描述 2026-10-13 的实际实现。当前闭环是录音、本地保存、Watch 向手机同步、通用 ASR 转写、回听和原声留存；完整产品范围见 [路线图](ROADMAP.md)。
+本文描述 2026-10-14 的实际实现。当前闭环是录音、本地保存、Watch 向手机同步、通用 ASR 转写、回听和原声留存；完整产品范围见 [路线图](ROADMAP.md)。持续输入新路径已通过离线写盘测试，S9 运行结果单列在验收记录，不能沿用旧录音器的真机结论。
 
 ## 模块与数据路径
 
 | 模块 | 责任 |
 | --- | --- |
 | `Sources/SuijiCore` | 录音模型、文件与 manifest 持久化、留存规则、通用 ASR 客户端；通过 SwiftPM 测试 |
-| `Shared/AudioCapture.swift` | AVAudioRecorder、麦克风权限、5 分钟分段、中断保存、启动时恢复未完成录音 |
+| `Shared/AudioCapture.swift` | AVAudioEngine 持续输入、麦克风权限、实际帧计时、中断保存、启动时恢复未完成录音 |
+| `Shared/ContinuousAudioWriter.swift` | 有界串行写盘，按帧轮转 AAC 文件，有序标记、停止与草稿取消 |
 | `Shared/CaptureDiagnostics.swift` | 显式开启、限时限量的本地录音诊断，不改变采集和同步 |
 | `Shared/CompanionSync.swift` | WatchConnectivity 文件排队、手机落盘、应用级回执、Watch 副本释放 |
 | `Shared/SessionModel.swift` | 界面状态、串行转写队列、恢复与清理、配置和 Keychain |
@@ -32,6 +33,8 @@ Watch 麦克风 → 手表 Audio/UUID.m4a → transferFile
 - 转写状态：`pending → transcribing → completed / failed`。只有非空文字持久保存后才算完成；失败保留原声并允许重试。重启时把遗留的 `transcribing` 恢复为 `pending`；任务取消也回到待处理。
 - 同步状态独立于转写。`transferFile` 排队或系统传输完成不等于手机已保存。手机完成导入与 manifest 保存后才发 `recordingReceipt`；Watch 收到回执并写入 `phoneReceivedAt` 后才释放副本。系统决定传输时机，未承诺到达时延；实际后台、离线及回执恢复结果见 [验收记录](ACCEPTANCE.md)。
 - 回执恢复：Watch 在激活、回到前台、连接恢复及有积压时，主动请求手机核对记录 ID；每批至多 50 个，轮换处理，单次在途。手机只确认已持久导入、文件字节数正确的 Watch 记录，或已按留存规则清理且完整转写仍存在的记录。Watch 只接受本次所问的 ID，先持久写回执，再释放音频；未拿到确认或回执写盘失败时保留副本并继续重试。原有 `transferUserInfo` 回执路径保留。
+- 发送成功后的等待：`TransferRetryLedger` 把系统传输成功与手机持久确认分开，台账编码保存到 Watch 的 UserDefaults。成功后的 5 分钟内不因 60 秒重试触发整文件重传，仍可核对回执；超时后允许恢复发送，正回执清除等待，负核对不抢先重发。每次传输带本地 attempt ID，旧尝试的迟到回调不能覆盖新尝试。5 分钟是初始恢复上限，不是系统送达保证，也不等同录音分段长度。
+- Watch 后台任务先恢复排队，再注册/检查完成。系统发送回调入口同步登记未完成工作，MainActor 写入上述台账后释放登记；KVO 的空闲完成路径也检查这道门槛，避免任务提前结束。这个修正仍需要后台冷启动真机验收。
 - ASR 目前使用普通 URLSession 上传，前台串行处理，申请有限的 UIKit 后台收尾时间；到期取消，下一次激活续处理。没有后台 URLSession 或 BGProcessingTask，也没有 App 被终止后持续转写的保证。
 
 ## 留存与文件保护
@@ -63,17 +66,21 @@ Key 只在手机设置输入和 Keychain 保存，不进 UserDefaults、Watch �
 
 ## 全天模式与时间标记
 
-`Recording.mode` / `ClipEnvelope.mode` 区分 `quick` 和 `continuous`，旧数据缺字段时为 `quick`。两种模式共用 `AudioCapture` 的 5 分钟保存/同步链路，每段创建新的 `AVAudioRecorder`；界面依据实际会话状态显示录音，不根据开关偏好假定后台仍运行。
+`Recording.mode` / `ClipEnvelope.mode` 区分 `quick` 和 `continuous`，旧数据缺字段时为 `quick`。两种模式共用一次启动的 AVAudioEngine 输入和五分钟文件保存链路，轮转文件时不停止麦克风。输入沿用实际硬件格式，当前接受 Float32 PCM，不强制假定 44.1 kHz；写入 AAC 文件的 processingFormat 必须匹配。
 
-`RecordingMarker` 包含稳定 ID、当前音频分段内的秒偏移 `offset`、`note` / `journal` 意图。`mark(intent:)` 从当前录音器取得位置，store 写入成功才返回，UI 才显示“已标记”；不触发停止、切段或第二个录音器。标记数组随 envelope 同步，手机详情展示时间；`journal` 标记只是日记起点，尚未生成整理文本或 Obsidian 文件。旧数据缺少标记时按空数组解码。
+新 tap 提供可跨线程保留的 `AVReadOnlyAudioPCMBuffer`，回调只交给按帧数限制的串行队列（默认最多缓冲两秒），不在回调中写文件、保存索引或每包建立 Task。`AudioFrameSegmenter` 用 64 位帧计数切分跨界 buffer；每个有效帧恰好写入一次。writer 依序关闭旧文件、提交索引、开启新文件，期间采集继续。发生溢出、格式变化、已知输入帧不连续或写入失败时明确中断，保留已接收且可恢复的部分，不以完整记录报成功。
+
+停止先停止输入，再排空有界队列、关闭并保存尾段；标记和取消也通过同一队列，避免与换文件竞争。成功取消不发保存通知；已经提交的段不能整体撤销。旧会话迟到的失败事件不能停止新会话。
+
+`RecordingMarker` 包含稳定 ID、当前音频分段内的秒偏移 `offset`、`note` / `journal` 意图。`mark(intent:)` 从 writer 的有序帧位置取得偏移，store 写入成功才返回，UI 才显示“已标记”；不触发停止、切段或第二个采集器。标记数组随 envelope 同步，手机详情展示时间；`journal` 标记只是日记起点，尚未生成整理文本或 Obsidian 文件。旧数据缺少标记时按空数组解码。
 
 ## 后台录音与可观测性
 
 Watch 和手机都配置 `UIBackgroundModes = [audio]`；`WKBackgroundModes` 不能代替这个音频字段。权限说明同时涵盖连续记录与主动口述。录音开始仍由用户在前台发起，不使用虚假的 workout session 保活。
 
-显示时长来自 `AVAudioRecorder.currentTime`，不再在实际录音进度为零时使用墙钟递增。分段结束后先保存音频索引，再尝试开始下一段，最后调用上一段的 `onSaved` 做刷新和同步；用 defer 确保下一段启动失败时，上一段仍只通知一次。这个改动缩短交接路径，并不保证无缝，需测实际边界音频。
+显示时长来自输入队列实际接受的帧数；停止后以真正写入的帧数收尾，不用墙钟补足停滞。保存完成事件回主线程做列表刷新和同步，音频 writer 不等这些工作。AAC 有编码填充，录音有效时长按实际帧数及文件有效帧表验证，不能把忽略填充信息的解码器输出总长直接当额外录音。
 
-每段启动前显式执行 `setActive(true)`，失败时保留已完成片段并报错。`RecordingProgressMonitor` 每段重置，以单调时间检查实际音频时间是否增长；执行中的观察超过 10 秒无进展时停止、保存并显示中断。回到前台也立即检查，但系统挂起期间无法保证按时检测，不把 `isRecording=true` 独立当作正在收音的证据。
+一次录音开始前显式 `setActive(true)` 并启动 Engine，文件交接不反复激活音频会话。`RecordingProgressMonitor` 以单调时间检查真实输入帧数是否增长；执行中的观察超过 10 秒无进展时停止、保存并显示中断。回到前台也立即检查，但系统挂起期间无法保证按时检测，不把 `isRecording=true` 独立当作正在收音的证据。watchOS 的 Engine 自动关闭机制不能禁用，持续输入 tap 的实际后台运行与耗电必须在 S9 重新验证。
 
 诊断默认关闭，仅显式 `SUIJI_DIAGNOSTICS_MINUTES=1...1440` 启用。60 秒采样、1600 条总上限、限时结束；结束诊断不停止用户录音。电池监测按启用前状态恢复。编码与原子写盘在串行后台队列处理，合并未写快照；进程突然结束可能损失最后诊断快照，不由此推定录音丢失。日志不含音频、转写或 Key，完整字段与测试方法见 [长录测试](LONG_RECORDING_TESTS.md)。
 

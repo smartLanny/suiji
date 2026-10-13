@@ -25,8 +25,14 @@ struct SuijiApp: App {
                 else if let bootError = delegate.bootError { ContentUnavailableView("记录暂时无法打开", systemImage: "externaldrive.badge.exclamationmark", description: Text(bootError + "\n已有文件会保留。")) }
                 else { ProgressView("打开随记") }
             }
-            .task { delegate.model?.resume() }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { delegate.model?.resume() } }
+            .task {
+                delegate.model?.capture.noteLifecycle(scenePhase: String(describing: scenePhase), isLuminanceReduced: false)
+                delegate.model?.resume()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                delegate.model?.capture.noteLifecycle(scenePhase: String(describing: phase), isLuminanceReduced: false)
+                if phase == .active { delegate.model?.resume() }
+            }
         }
     }
 }

@@ -29,9 +29,9 @@ xcrun devicectl device process launch \
 
 用户在前台轻点 Bot 开始；参数只控制诊断期限。第一条样本来自约 1 秒后实际调度的定时器，随后每 60 秒最多一条。样本和事件合计最多 1600 条；期限或上限到达时停止采样，**不会停止用户录音**。若进程挂起/退出，诊断不虚构中间心跳；结束状态也可能来不及写入。下一次显式启用会替换上一轮诊断，先取回旧报告再开下一轮。
 
-日志在 `Library/Application Support/Suiji/capture-diagnostics.json`。内容包括真实 `recorder.currentTime/isRecording`、逻辑录音状态、估计计时、当前分段、分段事件、场景/亮度降低状态、电池与充电状态、待传数量。未知量写 null，不把未知电量当 0。诊断期间临时开启电池监测，结束时恢复；编码和原子写盘在串行后台队列中执行，待写快照合并为最新一份，不在下一段启动前等待磁盘。
+日志在 `Library/Application Support/Suiji/capture-diagnostics.json`。内容包括实际音频进展、逻辑录音状态、计时、当前分段、分段事件、场景/亮度降低状态、电池与充电状态、待传数量。2026-10-14 起保留 `recorderCurrentTime/recorderIsRecording` 字段名，但分别来自当前文件实际写入帧数除以采样率，以及 Engine 运行且 writer 没有失败；旧快照来自 AVAudioRecorder。未知量写 null，不把未知电量当 0。诊断期间临时开启电池监测，结束时恢复；编码和原子写盘在串行后台队列中执行，待写快照合并为最新一份，不在下一段启动前等待磁盘。
 
-两端均记录 WatchConnectivity 激活/可达状态、待传文件数及 `watchOutstandingReceiptTransfers`（当前端出站录音回执数量）。后者不包含回执内容；0 只代表当前没有待发项，不能据此认定对端已持久保存回执。收到与释放仍以 Watch 索引中的实际字段核对。主动回执核对记录 `receipt_query_started/completed/failed`，手机记录 `receipt_query_answered`，旧回执路径记录 `receipt_received`；只含计数、来源或错误码，不含录音 ID 与内容。恢复验收应核对同批 ID、手机数量和 Watch 实际音频目录，不能只看消息成功回调。
+两端均记录 WatchConnectivity 激活/可达状态、待传文件数及 `watchOutstandingReceiptTransfers`（当前端出站录音回执数量）。后者不包含回执内容；0 只代表当前没有待发项，不能据此认定对端已持久保存回执。收到与释放仍以 Watch 索引中的实际字段核对。主动回执核对记录 `receipt_query_started/completed/failed`，手机记录 `receipt_query_answered`，旧回执路径记录 `receipt_received`。新增阶段诊断可包含本机记录 ID，用于关联同一片段的排队、导入和确认；不含录音内容。恢复验收应核对同批 ID、手机数量和 Watch 实际音频目录，不能只看消息成功回调。
 
 不记录录音内容、转写、密钥、联系人或设备序列号。原始诊断和索引仍可能包含记录 ID 与时间，只保留在本机；不要提交 Git。
 
@@ -91,3 +91,40 @@ python3 scripts/capture_soak.py report \
 `segment_begin.segmentDurationSeconds` 记录该段实际采用的期限；音频会话激活结果、激活/停用通知与 `progress_stalled` 用来区分启动失败和启动后不再收音。若执行中的观察连续超过 10 秒没有音频时间进展，App 保存已录部分并显示中断，不自动重开麦克风。进程被系统挂起时检测也会延后，不能把它当作保证 10 秒内提醒的后台看门狗。
 
 短段循环通过只能缩小故障范围，仍需重复原始五分钟分段、返回表盘场景，并核对落盘音频。停止假计时的保护本身不代表续录已修复。
+
+## 无唤醒同步的阶段定位
+
+2026-10-13 加入有界阶段诊断；仍需显式启用，两端都开启才可关联端到端延迟。Watch 后台刷新处理先执行 `resume/enqueuePending`，再注册可能立即完成的刷新任务，避免排队发生在任务结束之后。这个顺序修正不证明此前积压的根因已经找到，也不改变 Apple 对 `transferFile` 的后台调度。
+
+需要对应同一个本机记录 ID，核对以下事件：
+
+1. Watch `segment_finish`、`watch_file_transfer_enqueued`：文件何时准备好、何时交给系统。
+2. Watch `watch_file_transfer_did_finish_entry`：系统发送结果，不能代替手机的持久保存回执。
+3. iPhone `phone_file_receive_entry`、`phone_file_import_committed`、`phone_receipt_persisted`、`phone_receipt_transfer_queued`：接收入口、文件与索引提交、确认落盘、回执入队。
+4. Watch `watch_user_info_receive_entry`、`watch_phone_receipt_applied`，或主动核对的回复：确认何时真正到达与应用，最终还应检查副本释放。
+
+回调入口在实际回调线程记录墙钟和单调时钟；诊断事件保留该入口时间，另记 `mainActorDispatchDelayMilliseconds`，不能把主线程排队时间误当系统传输延迟。事件异步持久化，突然挂起可能只保留部分证据；缺少事件不能单独证明回调没有发生。不同设备的墙钟也有误差，毫秒级结论优先使用同机单调时钟。
+
+`watch_enqueue_batch` 区分系统队列已有、重试冷却和文件缺失；每分钟原有采样只增加文件传输进度的最小值、最大值和有进度的数量，不新增高频轮询。`watch_refresh_handler_stage`、刷新任务注册/完成/到期及重试计划/执行记录用于判断后台生命周期。默认关闭诊断时不写这些事件，也不新建采样定时器。
+
+iPhone 同时记录场景变化，样本包含 `phoneApplicationState` 和 `phoneBackgroundRefreshStatus`，用于区分实际前后台、系统后台刷新是否可用。低电量模式会自动关闭后台刷新；这个字段是环境线索，不能单独证明 WatchConnectivity 的延迟原因，也不因为未知或 restricted 就要求用户改设置。[Apple 后台刷新状态](https://developer.apple.com/documentation/uikit/uiapplication/backgroundrefreshstatus)
+
+实测时手机退到后台、Watch 开录后回表盘，期间不打开两端 App、不镜像或拉取 Watch。结束前先读手机持久索引，再让用户回 Watch 停止；停止后只读手机，记录系统自然到达时间。若最后需要唤醒才补齐，应明确判为无干预同步未通过，不能把最终文件齐全写成及时同步通过。一次短测只说明本轮状态，不能给出系统保证的送达上限。
+
+## 固定声源的分段边界测量
+
+旧采集器的 `segment_timing` 记录完成回调进入主线程的等待、关闭文件、读取时长、保存索引、激活会话与重建录音器等耗时。新持续输入路径记录 `file_begin/file_finish` 的关闭、索引和建文件耗时，以及实际帧数和采样率；不再每段重启输入。这些事件都只测处理时间，不代表第一帧/最后一帧实际收音边界。
+
+使用 `scripts/segment_probe.py` 生成非周期参考声源，或在本机分析录音。它不会播放、开麦或上传；依赖 NumPy。参考和实际录音均放工程外，避免混入公开仓库。
+
+```sh
+python3 scripts/segment_probe.py generate --seconds 180 --out /tmp/suiji-reference.wav
+python3 scripts/segment_probe.py align --reference /tmp/suiji-reference.wav \
+  --captures /tmp/segment-1.wav /tmp/segment-2.wav /tmp/segment-3.wav
+```
+
+安排一次约 150 秒的录音、60 秒临时分段，手机保持后台。先播放参考声源，再开始录音；停止录音后才结束声源，确保每段开头和结尾都处于参考音轨内。用户只需放好手表并开停，中途不用盯屏。设备无需离开充电器，此轮不测耗电。保持声源位置与正常可听音量，无法识别的录音判为未知。
+
+按真实录制顺序将手机收到的片段解码为单声道 16 kHz、16-bit PCM WAV。工具分别匹配首尾一秒锚点，低相关、周期声源歧义或不合理时钟比例均拒绝给通过结论。相邻锚点的缺失区间为正值、重复为负值；默认 20 ms 只是初始容差，不是已标定精度。退出码 0 表示边界在容差内、2 为缺失/重复、3 为无法判断、1 为输入错误。边界对齐不验证片段内部连续性。
+
+合成测试覆盖无缺口、1.5 秒缺口、0.25 秒重叠、静音、无关噪声和周期歧义；真机声学路径、AAC 裁切与时钟漂移仍需独立验收。通过后恢复默认 300 秒分段，重复至少两次正式交接。不得仅把分段改长来宣称修复漏音。

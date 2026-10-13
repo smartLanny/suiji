@@ -50,6 +50,11 @@ private struct CaptureDiagnosticSample: Codable, Sendable {
     let watchConnectivityActivationState: String?
     let watchOutstandingFileTransfers: Int?
     let watchOutstandingReceiptTransfers: Int?
+    let fileTransferProgressMinimum: Double?
+    let fileTransferProgressMaximum: Double?
+    let fileTransferProgressPositiveCount: Int?
+    let phoneApplicationState: String?
+    let phoneBackgroundRefreshStatus: String?
 
     enum CodingKeys: String, CodingKey {
         case timestamp, recorderCurrentTime, recorderIsRecording, meterLevel, logicalIsRecording
@@ -57,6 +62,8 @@ private struct CaptureDiagnosticSample: Codable, Sendable {
         case batteryState, lowPowerMode, thermalState, scenePhase, isLuminanceReduced
         case watchConnectivityReachable, watchConnectivityActivationState, watchOutstandingFileTransfers
         case watchOutstandingReceiptTransfers
+        case fileTransferProgressMinimum, fileTransferProgressMaximum, fileTransferProgressPositiveCount
+        case phoneApplicationState, phoneBackgroundRefreshStatus
     }
 
     func encode(to encoder: Encoder) throws {
@@ -79,6 +86,11 @@ private struct CaptureDiagnosticSample: Codable, Sendable {
         try values.encode(watchConnectivityActivationState, forKey: .watchConnectivityActivationState)
         try values.encode(watchOutstandingFileTransfers, forKey: .watchOutstandingFileTransfers)
         try values.encode(watchOutstandingReceiptTransfers, forKey: .watchOutstandingReceiptTransfers)
+        try values.encode(fileTransferProgressMinimum, forKey: .fileTransferProgressMinimum)
+        try values.encode(fileTransferProgressMaximum, forKey: .fileTransferProgressMaximum)
+        try values.encode(fileTransferProgressPositiveCount, forKey: .fileTransferProgressPositiveCount)
+        try values.encode(phoneApplicationState, forKey: .phoneApplicationState)
+        try values.encode(phoneBackgroundRefreshStatus, forKey: .phoneBackgroundRefreshStatus)
     }
 }
 
@@ -176,7 +188,7 @@ final class CaptureDiagnostics {
         RunLoop.main.add(timer, forMode: .common)
     }
 
-    func record(_ event: String, details: [String: String] = [:]) {
+    func record(_ event: String, details: [String: String] = [:], at occurredAt: Date? = nil) {
         guard isActive, var document else { return }
         guard !isExpired(at: Date(), document: &document) else { return }
         guard document.events.count + document.samples.count < maximumEntries else {
@@ -184,7 +196,7 @@ final class CaptureDiagnostics {
             finish(reason: "entry_limit")
             return
         }
-        document.events.append(CaptureDiagnosticEvent(timestamp: Self.timestamp(Date()), event: event,
+        document.events.append(CaptureDiagnosticEvent(timestamp: Self.timestamp(occurredAt ?? Date()), event: event,
                                                       details: details.isEmpty ? nil : details))
         self.document = document
         persist()
@@ -210,6 +222,25 @@ final class CaptureDiagnostics {
         }
         guard let snapshot else { return }
         let environment = deviceEnvironment()
+        let phoneApplicationState: String?
+        let phoneBackgroundRefreshStatus: String?
+        #if os(iOS)
+        switch UIApplication.shared.applicationState {
+        case .active: phoneApplicationState = "active"
+        case .inactive: phoneApplicationState = "inactive"
+        case .background: phoneApplicationState = "background"
+        @unknown default: phoneApplicationState = nil
+        }
+        switch UIApplication.shared.backgroundRefreshStatus {
+        case .available: phoneBackgroundRefreshStatus = "available"
+        case .denied: phoneBackgroundRefreshStatus = "denied"
+        case .restricted: phoneBackgroundRefreshStatus = "restricted"
+        @unknown default: phoneBackgroundRefreshStatus = nil
+        }
+        #else
+        phoneApplicationState = nil
+        phoneBackgroundRefreshStatus = nil
+        #endif
         document.samples.append(CaptureDiagnosticSample(timestamp: Self.timestamp(now),
                                         recorderCurrentTime: snapshot.recorderCurrentTime,
                                         recorderIsRecording: snapshot.recorderIsRecording,
@@ -227,7 +258,12 @@ final class CaptureDiagnostics {
                                         watchConnectivityReachable: environment.watchConnectivityReachable,
                                         watchConnectivityActivationState: environment.watchConnectivityActivationState,
                                         watchOutstandingFileTransfers: environment.watchOutstandingFileTransfers,
-                                        watchOutstandingReceiptTransfers: environment.watchOutstandingReceiptTransfers))
+                                        watchOutstandingReceiptTransfers: environment.watchOutstandingReceiptTransfers,
+                                        fileTransferProgressMinimum: environment.fileTransferProgressMinimum,
+                                        fileTransferProgressMaximum: environment.fileTransferProgressMaximum,
+                                        fileTransferProgressPositiveCount: environment.fileTransferProgressPositiveCount,
+                                        phoneApplicationState: phoneApplicationState,
+                                        phoneBackgroundRefreshStatus: phoneBackgroundRefreshStatus))
         self.document = document
         persist()
     }
@@ -262,11 +298,11 @@ final class CaptureDiagnostics {
         #endif
     }
 
-    var testSegmentDuration: TimeInterval? {
+    var testSegmentConfiguration: (duration: TimeInterval, deadline: Date)? {
         guard isActive, let deadline, Date() < deadline,
               let seconds = requestedInteger("SUIJI_TEST_SEGMENT_SECONDS"),
               (10...300).contains(seconds) else { return nil }
-        return TimeInterval(seconds)
+        return (TimeInterval(seconds), deadline)
     }
 
     private func requestedInteger(_ key: String) -> Int? {
@@ -306,7 +342,7 @@ final class CaptureDiagnostics {
         #endif
     }
 
-    private func deviceEnvironment() -> (batteryLevel: Double?, batteryState: String?, lowPowerMode: Bool?, thermalState: String?, watchConnectivityReachable: Bool?, watchConnectivityActivationState: String?, watchOutstandingFileTransfers: Int?, watchOutstandingReceiptTransfers: Int?) {
+    private func deviceEnvironment() -> (batteryLevel: Double?, batteryState: String?, lowPowerMode: Bool?, thermalState: String?, watchConnectivityReachable: Bool?, watchConnectivityActivationState: String?, watchOutstandingFileTransfers: Int?, watchOutstandingReceiptTransfers: Int?, fileTransferProgressMinimum: Double?, fileTransferProgressMaximum: Double?, fileTransferProgressPositiveCount: Int?) {
         let session = WCSession.default
         let activationState: String?
         switch session.activationState {
@@ -318,6 +354,12 @@ final class CaptureDiagnostics {
         let receiptCount = WCSession.isSupported() ? session.outstandingUserInfoTransfers.filter {
             $0.userInfo["type"] as? String == "recordingReceipt"
         }.count : nil
+        let transferProgress = WCSession.isSupported()
+            ? session.outstandingFileTransfers.map { $0.progress.fractionCompleted }.filter { $0.isFinite && (0...1).contains($0) }
+            : []
+        let progressMinimum = transferProgress.min()
+        let progressMaximum = transferProgress.max()
+        let progressPositiveCount = WCSession.isSupported() ? transferProgress.filter { $0 > 0 }.count : nil
         #if os(iOS)
         let device = UIDevice.current
         let level = Double(device.batteryLevel)
@@ -328,7 +370,10 @@ final class CaptureDiagnostics {
                 WCSession.isSupported() ? session.isReachable : nil,
                 WCSession.isSupported() ? activationState : nil,
                 WCSession.isSupported() ? session.outstandingFileTransfers.count : nil,
-                receiptCount)
+                receiptCount,
+                progressMinimum,
+                progressMaximum,
+                progressPositiveCount)
         #elseif os(watchOS)
         let device = WKInterfaceDevice.current()
         let level = Double(device.batteryLevel)
@@ -339,9 +384,12 @@ final class CaptureDiagnostics {
                 WCSession.isSupported() ? session.isReachable : nil,
                 WCSession.isSupported() ? activationState : nil,
                 WCSession.isSupported() ? session.outstandingFileTransfers.count : nil,
-                receiptCount)
+                receiptCount,
+                progressMinimum,
+                progressMaximum,
+                progressPositiveCount)
         #else
-        return (nil, nil, nil, nil, nil, nil, nil, nil)
+        return (nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
         #endif
     }
 

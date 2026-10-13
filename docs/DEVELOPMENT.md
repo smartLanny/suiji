@@ -19,6 +19,13 @@ open Suiji.xcodeproj
 swift test --scratch-path /tmp/suiji-native-tests
 ```
 
+Python 诊断与工程配置测试（分段声源工具依赖 NumPy；CI 使用 Python 3.13 并安装该依赖）：
+
+```sh
+python3 -m pip install 'numpy>=2,<3'
+PYTHONPATH=scripts python3 -m unittest discover -s scripts/tests -v
+```
+
 ```sh
 xcodebuild -project Suiji.xcodeproj -scheme Suiji \
   -destination 'generic/platform=iOS' \
@@ -90,6 +97,20 @@ xcodebuild -project Suiji.xcodeproj -scheme Suiji \
 仓库为 [smartLanny/suiji](https://github.com/smartLanny/suiji)。只提交源码、资源、生成脚本及可维护文档，不提交设备容器、录音、manifest、凭据或签名材料。提交前记录相关测试与真机证据；在 [验收表](ACCEPTANCE.md) 更新结果，保持「已实现」「已编译」「已真机验证」分别可查。
 
 GitHub Actions 在 push / pull request 后运行核心 SwiftPM 测试，以及 Python 诊断报告和工程配置回归测试；iOS 27 / watchOS 27 App 的编译和界面验收仍在具备相应 SDK 的本机执行。
+
+### 连续写盘离线验证
+
+需要 Xcode 27 SDK 和 macOS 27 宿主。以下工具只生成合成声音文件、经过实际 writer 写 AAC，再用 Apple 原生解码核对有效帧，不开麦、不播放。输出目录必须使用尚不存在的工程外路径；可把最后的采样率换为 48000 再跑一轮。
+
+```sh
+xcrun swiftc -swift-version 5 -target arm64-apple-macos27.0 \
+  Sources/SuijiCore/{Recording,RecordingStore,AudioFrameSegmenter,BoundedAudioFrameQueue}.swift \
+  Shared/ContinuousAudioWriter.swift scripts/verify_audio_writer.swift \
+  -o /tmp/suiji-verify-audio-writer
+/tmp/suiji-verify-audio-writer /tmp/suiji-writer-check-new 44100
+```
+
+工具覆盖精确边界、尾段、标记、格式错误、输入时钟不连续、缓冲溢出、取消和短段期限恢复。输出 `writer-check-report.json` 与合成参考/原生有效帧 WAV；转换为单声道 16 kHz、16-bit PCM 后，可用 `segment_probe.py` 进一步做波形对齐。部分通用解码器保留 AAC remainder，直接比较其输出总长会把填充误判为重复；核对有效帧信息，不放宽对齐阈值凑通过。这一层仍不能替代 S9 麦克风、后台与耗电验收。
 
 持久化变更需考虑现有 manifest 版本及旧数据迁移。公共行为与数据路径见 [架构](ARCHITECTURE.md)，后续范围见 [路线图](ROADMAP.md)。
 

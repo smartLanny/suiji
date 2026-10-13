@@ -13,12 +13,21 @@ final class WatchApplicationDelegate: NSObject, WKApplicationDelegate {
     }
 
     func handle(_ backgroundTasks: Set<WKRefreshBackgroundTask>) {
+        let currentModel = model
+        let connectivityTaskCount = backgroundTasks.filter { $0 is WKWatchConnectivityRefreshBackgroundTask }.count
+        currentModel?.companion.recordWatchRefreshStage("handler_entered", taskCount: backgroundTasks.count,
+                                                        connectivityTaskCount: connectivityTaskCount)
+        currentModel?.resume()
+        currentModel?.companion.recordWatchRefreshStage("resume_returned", taskCount: backgroundTasks.count,
+                                                        connectivityTaskCount: connectivityTaskCount)
         for task in backgroundTasks {
-            if let connectivityTask = task as? WKWatchConnectivityRefreshBackgroundTask {
-                CompanionSync.registerBackgroundTask(connectivityTask)
+            if let connectivityTask = task as? WKWatchConnectivityRefreshBackgroundTask,
+               let companion = currentModel?.companion {
+                companion.registerBackgroundTask(connectivityTask)
             } else { task.setTaskCompletedWithSnapshot(false) }
         }
-        model?.resume()
+        currentModel?.companion.recordWatchRefreshStage("task_registration_finished", taskCount: backgroundTasks.count,
+                                                        connectivityTaskCount: connectivityTaskCount)
     }
 }
 

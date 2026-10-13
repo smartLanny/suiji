@@ -4,6 +4,18 @@
 	classes = {};
 	objectVersion = 60;
 	objects = {
+		E7AC5AF70300579E90BF4B9F /* AudioFrameSegmenter.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "AudioFrameSegmenter.swift";
+			sourceTree = "<group>";
+		};
+		28F3B0197319542699872D57 /* BoundedAudioFrameQueue.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "BoundedAudioFrameQueue.swift";
+			sourceTree = "<group>";
+		};
 		9C3CE4D859565A958835356A /* Recording.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
@@ -28,13 +40,22 @@
 			path = "TranscriptionClient.swift";
 			sourceTree = "<group>";
 		};
+		23679B591E4350588AFA6009 /* TransferRetryLedger.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "TransferRetryLedger.swift";
+			sourceTree = "<group>";
+		};
 		09573C2B13855DCC8CD0A393 /* SuijiCore */ = {
 			isa = PBXGroup;
 			children = (
+				E7AC5AF70300579E90BF4B9F /* AudioFrameSegmenter.swift */,
+				28F3B0197319542699872D57 /* BoundedAudioFrameQueue.swift */,
 				9C3CE4D859565A958835356A /* Recording.swift */,
 				506B1F04504956F89A693C24 /* RecordingProgressMonitor.swift */,
 				B23C9E7855735BC1A9243C60 /* RecordingStore.swift */,
 				9F0274E82F9A59F091AA3D3B /* TranscriptionClient.swift */,
+				23679B591E4350588AFA6009 /* TransferRetryLedger.swift */,
 			);
 			path = "SuijiCore";
 			sourceTree = "<group>";
@@ -63,6 +84,12 @@
 			path = "CompanionVisual.swift";
 			sourceTree = "<group>";
 		};
+		81DC17D41FAE534B92835080 /* ContinuousAudioWriter.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "ContinuousAudioWriter.swift";
+			sourceTree = "<group>";
+		};
 		A9815029A33A523CA0583675 /* SessionModel.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
@@ -76,6 +103,7 @@
 				A95122AAD37F59E595004139 /* CaptureDiagnostics.swift */,
 				D1068007A29258C1B303EBFF /* CompanionSync.swift */,
 				B1D20650AD465C86A99B66DB /* CompanionVisual.swift */,
+				81DC17D41FAE534B92835080 /* ContinuousAudioWriter.swift */,
 				A9815029A33A523CA0583675 /* SessionModel.swift */,
 			);
 			path = "Shared";
@@ -230,6 +258,22 @@
 			);
 			sourceTree = "<group>";
 		};
+		64ADA86520405B7BAEBF5AEE /* AudioFrameSegmenter.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = E7AC5AF70300579E90BF4B9F /* AudioFrameSegmenter.swift */;
+		};
+		7ED5EC05A7445370A33FFD8F /* AudioFrameSegmenter.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = E7AC5AF70300579E90BF4B9F /* AudioFrameSegmenter.swift */;
+		};
+		158C48D1747D51AB839A95D1 /* BoundedAudioFrameQueue.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 28F3B0197319542699872D57 /* BoundedAudioFrameQueue.swift */;
+		};
+		1B4740A185E65C9886B87208 /* BoundedAudioFrameQueue.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 28F3B0197319542699872D57 /* BoundedAudioFrameQueue.swift */;
+		};
 		CC0B8083034458A9912DCD41 /* Recording.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = 9C3CE4D859565A958835356A /* Recording.swift */;
@@ -262,6 +306,14 @@
 			isa = PBXBuildFile;
 			fileRef = 9F0274E82F9A59F091AA3D3B /* TranscriptionClient.swift */;
 		};
+		9C983B8C75A952A98EE157DA /* TransferRetryLedger.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 23679B591E4350588AFA6009 /* TransferRetryLedger.swift */;
+		};
+		E3F828D9063F5AD3B4B5B23D /* TransferRetryLedger.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 23679B591E4350588AFA6009 /* TransferRetryLedger.swift */;
+		};
 		73FF1659228F517297F3F148 /* AudioCapture.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = 0CFC11E2504F5E3CAD095AD2 /* AudioCapture.swift */;
@@ -293,6 +345,14 @@
 		89D12CE7AE3C585395834F8D /* CompanionVisual.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = B1D20650AD465C86A99B66DB /* CompanionVisual.swift */;
+		};
+		68A806550A25570B9E720CD2 /* ContinuousAudioWriter.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 81DC17D41FAE534B92835080 /* ContinuousAudioWriter.swift */;
+		};
+		00A7816CD2B35B03924D372B /* ContinuousAudioWriter.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 81DC17D41FAE534B92835080 /* ContinuousAudioWriter.swift */;
 		};
 		AEDA5693EB52544FB2286FE5 /* SessionModel.swift in Sources */ = {
 			isa = PBXBuildFile;
@@ -342,14 +402,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				64ADA86520405B7BAEBF5AEE /* AudioFrameSegmenter.swift in Sources */,
+				158C48D1747D51AB839A95D1 /* BoundedAudioFrameQueue.swift in Sources */,
 				CC0B8083034458A9912DCD41 /* Recording.swift in Sources */,
 				165580BAB0D55406AF1ED6AA /* RecordingProgressMonitor.swift in Sources */,
 				6CD0641A49A05175908A090C /* RecordingStore.swift in Sources */,
 				2597D0D4165D5535BF90857E /* TranscriptionClient.swift in Sources */,
+				9C983B8C75A952A98EE157DA /* TransferRetryLedger.swift in Sources */,
 				73FF1659228F517297F3F148 /* AudioCapture.swift in Sources */,
 				F6F886A9E9B155D5A029E923 /* CaptureDiagnostics.swift in Sources */,
 				336A4A3615535DA881240E26 /* CompanionSync.swift in Sources */,
 				F8AF582FF9AA5DF9AF781C80 /* CompanionVisual.swift in Sources */,
+				68A806550A25570B9E720CD2 /* ContinuousAudioWriter.swift in Sources */,
 				AEDA5693EB52544FB2286FE5 /* SessionModel.swift in Sources */,
 				72E53D823D3E5D938C461EBB /* RecordingDetail.swift in Sources */,
 				60000BC3143652419A8DF2AC /* RecordingTimeline.swift in Sources */,
@@ -362,14 +426,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7ED5EC05A7445370A33FFD8F /* AudioFrameSegmenter.swift in Sources */,
+				1B4740A185E65C9886B87208 /* BoundedAudioFrameQueue.swift in Sources */,
 				7956CA64D7D5566D95B43125 /* Recording.swift in Sources */,
 				29BA3928009F5C1486B8BCF4 /* RecordingProgressMonitor.swift in Sources */,
 				1EA8D8CC88CD5465B3A6237D /* RecordingStore.swift in Sources */,
 				6517C5214204502FBE947624 /* TranscriptionClient.swift in Sources */,
+				E3F828D9063F5AD3B4B5B23D /* TransferRetryLedger.swift in Sources */,
 				B3261175C5E55164B5A9F7A6 /* AudioCapture.swift in Sources */,
 				2FA16F038CA95D05A8C9A812 /* CaptureDiagnostics.swift in Sources */,
 				6ADAE345C147508383E6CF02 /* CompanionSync.swift in Sources */,
 				89D12CE7AE3C585395834F8D /* CompanionVisual.swift in Sources */,
+				00A7816CD2B35B03924D372B /* ContinuousAudioWriter.swift in Sources */,
 				3CBE8166F70D583EA3EC6AE2 /* SessionModel.swift in Sources */,
 				92A089BEE04C5FDEAF6534EB /* SuijiWatchApp.swift in Sources */,
 			);

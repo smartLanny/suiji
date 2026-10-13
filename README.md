@@ -2,7 +2,7 @@
 
 原生 SwiftUI iPhone / Apple Watch 客户端，第一阶段实现主动口述与分段持续录音 → 本地保存 → 手表同步手机 → 可替换的 OpenAI 兼容转写。Watch 轻点 Bot 开始连续录音，再点停止保存，长按可标记时刻，24 小时续航和后台稳定性仍需实测。原型里的提醒事项、Obsidian、健康、周/月回顾和 Agent 执行将在后续接入，当前原生 App 不显示模拟结果。
 
-[GitHub 仓库](https://github.com/smartLanny/suiji) · [开发安装](docs/DEVELOPMENT.md) · [设计规范](docs/DESIGN.md) · [架构](docs/ARCHITECTURE.md) · [验收记录](docs/ACCEPTANCE.md) · [路线图](docs/ROADMAP.md) · [长录测试](docs/LONG_RECORDING_TESTS.md) · [睡眠与环境声音](docs/RECORDING_CONTEXT_RESEARCH.md) · [AI 硬件借鉴](docs/AI_WEARABLE_LESSONS.md)
+[GitHub 仓库](https://github.com/smartLanny/suiji) · [现在的功能与操作](docs/PRODUCT_DIRECTION.md) · [开发安装](docs/DEVELOPMENT.md) · [设计规范](docs/DESIGN.md) · [架构](docs/ARCHITECTURE.md) · [验收记录](docs/ACCEPTANCE.md) · [路线图](docs/ROADMAP.md) · [长录测试](docs/LONG_RECORDING_TESTS.md) · [睡眠与环境声音](docs/RECORDING_CONTEXT_RESEARCH.md) · [AI 硬件借鉴](docs/AI_WEARABLE_LESSONS.md)
 
 ## 开源许可
 
@@ -31,7 +31,7 @@
 
 使用 HTTPS；HTTP 仅限 loopback 本机调试。跨站及同站重定向均拒绝，避免把密钥发送到重定向地址。默认请求超时 120 秒，单片段不超过 25 MB；不要求后端支持流式、说话人识别或供应商专用参数。
 
-录音为 AAC / m4a、单声道、44.1 kHz，每 5 分钟关闭并保存一个片段。录音器请求 64 kbps，但此次 iPhone 短片段实测约 132 kbps（6.59 秒 / 108,810 字节）；长录音容量与耗电必须另测。分段切换存在启动间隔，尚未验证全天连续录制的实际丢帧和功耗。S9 配置热修已观察到约半小时多段保存；具体解码和场景边界见验收记录。
+录音为 AAC / m4a，请求 64 kbps，采样率与声道沿用实际麦克风格式。2026-10-14 改为 AVAudioEngine 持续采集、每五分钟按实际帧数保存文件，交接不重启麦克风；44.1 / 48 kHz 合成声音的实际写盘与原生有效帧解码已通过连续性测试。旧录音器在 S9 的固定声源测试中确认过约 1.6 秒切段漏音；新路径的真机后台、边界和耗电须重新验收，不能把离线结果称为全天通过。请求码率不等于实际输出码率，容量以真实文件为准。
 
 ## 工程
 
@@ -52,8 +52,8 @@ xcodebuild -project Suiji.xcodeproj -scheme SuijiWatch -destination 'generic/pla
 
 ## 验证范围
 
-核心 33 项测试已通过，覆盖重启恢复转写队列、重复传输、损坏/不完整文件、回执前保护、30 天清理、永久与手动保留、转写错误、multipart 请求、日记/全天模式兼容、标记持久化与录音进展停滞检测。它们使用隔离临时文件及模拟 HTTP 响应，不代表真实语音识别准确率或 Watch 无线传输验收。
+核心 55 项测试已通过，覆盖重启恢复转写队列、重复传输、损坏/不完整文件、回执前保护、30 天清理、永久与手动保留、转写错误、multipart 请求、日记/全天模式兼容、标记持久化、录音进展停滞、逐帧分段、有界写盘队列与发送成功后的回执等待。它们使用隔离临时文件及模拟 HTTP 响应，不代表真实语音识别准确率或 Watch 无线传输验收。
 
-实际设备安装和测试结果见 [验收记录](docs/ACCEPTANCE.md)。仍需实测：手表与手机断联/重连、锁屏覆盖、来电中断、分段边界缺口、长时电量和真实后端转写。AirPods 路由及快捷启动入口尚未加入本轮验收。
+实际设备安装和测试结果见 [验收记录](docs/ACCEPTANCE.md)。短时后台录音、手机关机后的本地保存与恢复导入已有实机证据。仍需实测：无需人工唤醒的及时补传、来电中断、分段真实缺口、长时电量和真实后端转写。AirPods 路由及快捷启动入口尚未加入本轮验收。
 
 参考：[Apple WatchConnectivity 文件传输](https://developer.apple.com/documentation/watchconnectivity/wcsession/transferfile(_:metadata:)) · [OpenAI 转写接口](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create)
