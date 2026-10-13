@@ -298,14 +298,15 @@ def _diagnostic_samples(diagnostics: Any) -> list[dict[str, Any]]:
     if not isinstance(diagnostics, dict) or not isinstance(diagnostics.get("samples"), list):
         return []
     normalized = []
-    for raw in diagnostics["samples"]:
+    for source_order, raw in enumerate(diagnostics["samples"]):
         if not isinstance(raw, dict):
+            normalized.append({"sourceOrder": source_order, "timestamp": None})
             continue
         timestamp = _parse_timestamp(raw.get("timestamp"))
-        if timestamp is None:
-            continue
         normalized.append({
+            "sourceOrder": source_order,
             "timestamp": timestamp,
+            "currentSegmentUUID": raw.get("currentSegmentUUID") if isinstance(raw.get("currentSegmentUUID"), str) else None,
             "recorderCurrentTime": _number(raw.get("recorderCurrentTime")),
             "meterLevel": _number(raw.get("meterLevel")),
             "recorderIsRecording": _bool(raw.get("recorderIsRecording")),
@@ -320,15 +321,103 @@ def _diagnostic_samples(diagnostics: Any) -> list[dict[str, Any]]:
             "watchConnectivityActivationState": _activation_state(raw.get("watchConnectivityActivationState")),
             "watchOutstandingFileTransfers": _nonnegative_integer(raw.get("watchOutstandingFileTransfers")),
         })
-    return sorted(normalized, key=lambda item: item["timestamp"])
+    return normalized
+
+
+def _recorder_clock_stall_summary(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates: list[tuple[float, int]] = []
+    continuity_group: list[dict[str, Any]] = []
+
+    def close_group() -> None:
+        if len(continuity_group) < 3:
+            continuity_group.clear()
+            return
+
+        start = 0
+        candidate_end = -1
+        candidate_best: tuple[float, int] | None = None
+        for end, sample in enumerate(continuity_group):
+            while (
+                max(item["recorderCurrentTime"] for item in continuity_group[start:end + 1])
+                - min(item["recorderCurrentTime"] for item in continuity_group[start:end + 1])
+                > 0.05
+            ):
+                start += 1
+
+            window = continuity_group[start:end + 1]
+            span = (window[-1]["timestamp"] - window[0]["timestamp"]).total_seconds()
+            if len(window) < 3 or span < 120:
+                continue
+
+            measured_candidate = (span, len(window))
+            if candidate_best is None:
+                candidate_best = measured_candidate
+            elif candidate_end >= start:
+                if measured_candidate > candidate_best:
+                    candidate_best = measured_candidate
+            else:
+                candidates.append(candidate_best)
+                candidate_best = measured_candidate
+            candidate_end = end
+
+        if candidate_best is not None:
+            candidates.append(candidate_best)
+        continuity_group.clear()
+
+    for sample in sorted(samples, key=lambda item: item["sourceOrder"]):
+        timestamp = sample.get("timestamp")
+        segment_id = sample.get("currentSegmentUUID")
+        recorder_time = sample.get("recorderCurrentTime")
+        eligible = (
+            isinstance(timestamp, datetime)
+            and isinstance(segment_id, str)
+            and bool(segment_id.strip())
+            and sample.get("recorderIsRecording") is True
+            and sample.get("logicalIsRecording") is True
+            and recorder_time is not None
+            and recorder_time >= 0
+        )
+        if not eligible:
+            close_group()
+            continue
+
+        if continuity_group:
+            previous = continuity_group[-1]
+            gap = (timestamp - previous["timestamp"]).total_seconds()
+            if (
+                segment_id != previous["currentSegmentUUID"]
+                or gap <= 0
+                or gap > 150
+            ):
+                close_group()
+        continuity_group.append(sample)
+    close_group()
+
+    longest_candidate = max(candidates, default=(0.0, 0), key=lambda item: (item[0], item[1]))
+
+    return {
+        "candidateCount": len(candidates),
+        "longestSpanSeconds": round(longest_candidate[0], 1),
+        "longestSampleCount": longest_candidate[1],
+        "interpretation": (
+            "仅提示 recorderCurrentTime 采样平台疑点，仍需实际文件解码或内容证据；"
+            "0 个候选也不代表连续录音通过。"
+        ),
+    }
 
 
 def _diagnostic_summary(samples: list[dict[str, Any]], event_count: int) -> dict[str, Any]:
+    clock_stall = _recorder_clock_stall_summary(samples)
+    samples = sorted(
+        (sample for sample in samples if isinstance(sample.get("timestamp"), datetime)),
+        key=lambda item: item["timestamp"],
+    )
     if not samples:
         return {
             "available": False,
             "sampleCount": 0,
             "eventCount": event_count,
+            "recorderClockStall": clock_stall,
             "watchConnectivity": {
                 "availableSamples": 0,
                 "reachableSamples": 0,
@@ -395,6 +484,7 @@ def _diagnostic_summary(samples: list[dict[str, Any]], event_count: int) -> dict
             if sample["meterLevel"] is not None and 0 <= sample["meterLevel"] <= 1
         ),
         "maxElapsedEstimateSeconds": _max_optional(sample["elapsedEstimate"] for sample in samples),
+        "recorderClockStall": clock_stall,
         "stateTransitions": transitions[:100],
         "observedScenePhases": phases,
         "luminanceReducedSamples": sum(sample["isLuminanceReduced"] is True for sample in samples),
@@ -527,6 +617,7 @@ def _filter_window(
     since: datetime | None,
     until: datetime | None,
     timestamp_key: str,
+    preserve_excluded_sample_breaks: bool = False,
 ) -> tuple[list[Any], int, int]:
     if not isinstance(items, list):
         return [], 0, 0
@@ -539,15 +630,21 @@ def _filter_window(
         timestamp = _parse_timestamp(item.get(timestamp_key)) if isinstance(item, dict) else None
         if timestamp is None:
             excluded += 1
+            if preserve_excluded_sample_breaks:
+                included.append({"timestamp": None})
             continue
         if since is not None and timestamp < since:
             excluded += 1
             duration = _number(item.get("duration")) if isinstance(item, dict) else None
             if duration is not None and duration > 0 and timestamp + timedelta(seconds=duration) > since:
                 excluded_crossing_start += 1
+            if preserve_excluded_sample_breaks:
+                included.append({"timestamp": None})
             continue
         if until is not None and timestamp > until:
             excluded += 1
+            if preserve_excluded_sample_breaks:
+                included.append({"timestamp": None})
             continue
         if timestamp is not None:
             included.append(item)
@@ -587,7 +684,8 @@ def build_report(
     filtered_manifest["recordings"] = filtered_recordings
     filtered_diagnostics = dict(diagnostics) if isinstance(diagnostics, dict) else {}
     filtered_samples, excluded_samples, _ = _filter_window(
-        filtered_diagnostics.get("samples"), cutoff, window_end, "timestamp"
+        filtered_diagnostics.get("samples"), cutoff, window_end, "timestamp",
+        preserve_excluded_sample_breaks=True,
     )
     filtered_events, excluded_events, _ = _filter_window(
         filtered_diagnostics.get("events"), cutoff, window_end, "timestamp"
@@ -595,6 +693,10 @@ def build_report(
     filtered_diagnostics["samples"] = filtered_samples
     filtered_diagnostics["events"] = filtered_events
     samples = _diagnostic_samples(filtered_diagnostics)
+    battery_samples = sorted(
+        (sample for sample in samples if isinstance(sample.get("timestamp"), datetime)),
+        key=lambda item: item["timestamp"],
+    )
     return {
         "schemaVersion": 1,
         "reportScope": "仅汇总所选快照可见证据；未对音频、设备连接或后台运行进行额外检测。",
@@ -618,7 +720,7 @@ def build_report(
             "status": "not_collected",
             "description": "快照未复制或解码音频文件；实际文件可读性仍待验证。",
         },
-        "battery": _battery_summary(samples),
+        "battery": _battery_summary(battery_samples),
         "scenarioLabels": [
             {"label": _clean_label(label), "source": "user_asserted"}
             for label in (labels or []) if label.strip()
@@ -630,6 +732,7 @@ def _markdown(report: dict[str, Any]) -> str:
     manifest = report["manifest"]
     samples = report["recorderSamples"]
     battery = report["battery"]
+    clock_stall = samples["recorderClockStall"]
     connectivity = samples.get("watchConnectivity") or {
         "availableSamples": 0,
         "reachableSamples": 0,
@@ -708,6 +811,12 @@ def _markdown(report: dict[str, Any]) -> str:
         lines.append("- 没有可用诊断样本；不能据此判断录音器在测试窗口内的运行状态。")
     lines.extend([
         f"- 解读边界：{samples['interpretation']}",
+        "",
+        "## Recorder 时钟平台疑点",
+        "",
+        f"- 候选数：{clock_stall['candidateCount']}",
+        f"- 最长候选：{clock_stall['longestSpanSeconds']} 秒、{clock_stall['longestSampleCount']} 个样本",
+        f"- {clock_stall['interpretation']}",
         "",
         "## 文件解码证据",
         "",

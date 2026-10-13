@@ -65,6 +65,132 @@ class CaptureSoakTests(unittest.TestCase):
         self.assertEqual(recorder["gapsOverTwoMinutes"], 1)
         self.assertIn("不能证明", recorder["interpretation"])
 
+    def test_fixed_recorder_clock_across_one_segment_is_a_private_candidate(self):
+        segment_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        report = capture_soak.build_report(snapshot(samples=[
+            sample(0, recorderCurrentTime=0.015442, currentSegmentUUID=segment_id, scenePhase="background"),
+            sample(2, recorderCurrentTime=0.015442, currentSegmentUUID=segment_id, scenePhase="inactive"),
+            sample(4, recorderCurrentTime=0.015442, currentSegmentUUID=segment_id, scenePhase="background"),
+        ]))
+
+        candidate = report["recorderSamples"]["recorderClockStall"]
+        self.assertEqual(candidate["candidateCount"], 1)
+        self.assertEqual(candidate["longestSpanSeconds"], 240)
+        self.assertEqual(candidate["longestSampleCount"], 3)
+        self.assertIn("0 个候选也不代表连续录音通过", candidate["interpretation"])
+        self.assertNotIn(segment_id, json.dumps(report))
+
+    def test_clock_advancement_and_phase_changes_do_not_create_candidate(self):
+        segment_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        report = capture_soak.build_report(snapshot(samples=[
+            sample(0, recorderCurrentTime=0, currentSegmentUUID=segment_id, scenePhase="background"),
+            sample(1, recorderCurrentTime=60, currentSegmentUUID=segment_id, scenePhase="inactive"),
+            sample(2, recorderCurrentTime=120, currentSegmentUUID=segment_id, scenePhase="active"),
+        ]))
+
+        self.assertEqual(report["recorderSamples"]["recorderClockStall"]["candidateCount"], 0)
+
+    def test_tail_of_clock_drift_can_still_be_a_stall_candidate(self):
+        segment_id = "abababab-abab-4bab-8bab-abababababab"
+        report = capture_soak.build_report(snapshot(samples=[
+            sample(0, recorderCurrentTime=0, currentSegmentUUID=segment_id),
+            sample(1, recorderCurrentTime=0.04, currentSegmentUUID=segment_id),
+            sample(2, recorderCurrentTime=0.06, currentSegmentUUID=segment_id),
+            sample(3, recorderCurrentTime=0.06, currentSegmentUUID=segment_id),
+        ]))
+
+        candidate = report["recorderSamples"]["recorderClockStall"]
+        self.assertEqual(candidate["candidateCount"], 1)
+        self.assertEqual(candidate["longestSpanSeconds"], 120)
+        self.assertEqual(candidate["longestSampleCount"], 3)
+
+    def test_longest_stall_summary_uses_one_candidate_tuple(self):
+        long_segment = "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd"
+        dense_segment = "efefefef-efef-4fef-8fef-efefefefefef"
+        samples = [
+            sample(0, recorderCurrentTime=5, currentSegmentUUID=long_segment),
+            sample(2, recorderCurrentTime=5, currentSegmentUUID=long_segment),
+            sample(4, recorderCurrentTime=5, currentSegmentUUID=long_segment),
+        ]
+        samples.extend(
+            sample(10 + (index / 3), recorderCurrentTime=8, currentSegmentUUID=dense_segment)
+            for index in range(7)
+        )
+        candidate = capture_soak.build_report(snapshot(samples=samples))["recorderSamples"]["recorderClockStall"]
+
+        self.assertEqual(candidate["candidateCount"], 2)
+        self.assertEqual(candidate["longestSpanSeconds"], 240)
+        self.assertEqual(candidate["longestSampleCount"], 3)
+
+    def test_segment_rotation_and_clock_reset_do_not_stitch_runs(self):
+        old_segment = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        new_segment = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        report = capture_soak.build_report(snapshot(samples=[
+            sample(0, recorderCurrentTime=240, currentSegmentUUID=old_segment),
+            sample(1, recorderCurrentTime=300, currentSegmentUUID=old_segment),
+            sample(2, recorderCurrentTime=0.015, currentSegmentUUID=new_segment),
+            sample(3, recorderCurrentTime=60.015, currentSegmentUUID=new_segment),
+            sample(4, recorderCurrentTime=120.015, currentSegmentUUID=new_segment),
+        ]))
+
+        self.assertEqual(report["recorderSamples"]["recorderClockStall"]["candidateCount"], 0)
+
+    def test_long_sample_gap_and_timestamp_reversal_cut_stall_runs(self):
+        segment_id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        gap_report = capture_soak.build_report(snapshot(samples=[
+            sample(0, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(1, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(4, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(5, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+        ]))
+        self.assertEqual(gap_report["recorderSamples"]["recorderClockStall"]["candidateCount"], 0)
+
+        reverse_samples = [
+            sample(0, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(1, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(0.5, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(2.5, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+        ]
+        reverse_report = capture_soak.build_report(snapshot(samples=reverse_samples))
+        self.assertEqual(reverse_report["recorderSamples"]["recorderClockStall"]["candidateCount"], 0)
+
+    def test_missing_fields_and_recording_state_break_stall_runs(self):
+        segment_id = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        cases = [
+            [
+                sample(0, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(1, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(2, recorderCurrentTime=1, currentSegmentUUID=None),
+                sample(3, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(4, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            ],
+            [
+                sample(0, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(1, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(2, recorderCurrentTime=1, currentSegmentUUID=segment_id, recorderIsRecording=False),
+                sample(3, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(4, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            ],
+            [
+                sample(0, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(1, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(2, recorderCurrentTime=None, currentSegmentUUID=segment_id),
+                sample(3, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(4, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            ],
+            [
+                sample(0, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(1, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                {**sample(2, recorderCurrentTime=1, currentSegmentUUID=segment_id), "timestamp": None},
+                sample(3, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+                sample(4, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            ],
+        ]
+        for case in cases:
+            with self.subTest(case=case[2]):
+                report = capture_soak.build_report(snapshot(samples=case))
+                self.assertEqual(report["recorderSamples"]["recorderClockStall"]["candidateCount"], 0)
+
     def test_explicit_false_is_reported_as_a_sample(self):
         report = capture_soak.build_report(snapshot(samples=[
             sample(0), sample(1, recorderIsRecording=False, logicalIsRecording=False),
@@ -112,6 +238,44 @@ class CaptureSoakTests(unittest.TestCase):
         self.assertEqual(battery["status"], "valid_unplugged_interval")
         self.assertEqual(battery["dropPercentagePointsPerHour"], 5.0)
 
+    def test_battery_ignores_missing_timestamps_and_sorts_valid_samples(self):
+        unordered = [
+            sample(2, batteryLevel=0.76, batteryState="unplugged"),
+            {**sample(1, batteryLevel=0.75, batteryState="unplugged"), "timestamp": None},
+            "malformed sample",
+            sample(0, batteryLevel=0.80, batteryState="unplugged"),
+            sample(1, batteryLevel=0.78, batteryState="unplugged"),
+        ]
+        report = capture_soak.build_report(snapshot(samples=unordered))
+
+        battery = report["battery"]
+        self.assertEqual(battery["status"], "valid_unplugged_interval_under_60m")
+        self.assertEqual(battery["validSampleCount"], 3)
+        self.assertEqual(battery["startBatteryPercent"], 80.0)
+        self.assertEqual(battery["endBatteryPercent"], 76.0)
+        self.assertEqual(battery["consumedPercentagePoints"], 4.0)
+        self.assertIsNone(battery["dropPercentagePointsPerHour"])
+
+    def test_missing_timestamp_sample_still_breaks_stall_run(self):
+        segment_id = "12121212-3434-4a4a-8b8b-565656565656"
+        report = capture_soak.build_report(snapshot(samples=[
+            sample(0, recorderCurrentTime=1, currentSegmentUUID=segment_id,
+                   batteryLevel=0.80, batteryState="unplugged"),
+            sample(1, recorderCurrentTime=1, currentSegmentUUID=segment_id,
+                   batteryLevel=0.79, batteryState="unplugged"),
+            {**sample(1.5, recorderCurrentTime=1, currentSegmentUUID=segment_id,
+                      batteryLevel=0.78, batteryState="unplugged"), "timestamp": None},
+            sample(2, recorderCurrentTime=1, currentSegmentUUID=segment_id,
+                   batteryLevel=0.78, batteryState="unplugged"),
+            sample(3, recorderCurrentTime=1, currentSegmentUUID=segment_id,
+                   batteryLevel=0.77, batteryState="unplugged"),
+        ]))
+
+        self.assertEqual(report["recorderSamples"]["recorderClockStall"]["candidateCount"], 0)
+        self.assertEqual(report["battery"]["validSampleCount"], 4)
+        self.assertEqual(report["battery"]["startBatteryPercent"], 80.0)
+        self.assertEqual(report["battery"]["endBatteryPercent"], 77.0)
+
     def test_watch_connectivity_false_means_only_currently_unreachable(self):
         report = capture_soak.build_report(snapshot(samples=[
             sample(0, watchConnectivityReachable=False,
@@ -156,6 +320,22 @@ class CaptureSoakTests(unittest.TestCase):
         self.assertEqual(report["recorderSamples"]["sampleCount"], 2)
         self.assertEqual(report["recorderSamples"]["eventCount"], 1)
 
+    def test_excluded_diagnostic_sample_remains_a_stall_break(self):
+        segment_id = "34343434-5656-4a4a-8b8b-787878787878"
+        raw = snapshot(samples=[
+            sample(0, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(-1, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(1, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+            sample(2, recorderCurrentTime=1, currentSegmentUUID=segment_id),
+        ])
+
+        report = capture_soak.build_report(raw, since=timestamp(0))
+
+        self.assertEqual(report["scope"]["excludedOutsideWindowOrWithoutTimestamp"]["diagnosticSamples"], 1)
+        self.assertEqual(report["recorderSamples"]["sampleCount"], 3)
+        self.assertEqual(report["recorderSamples"]["recorderClockStall"]["candidateCount"], 0)
+        self.assertEqual(report["battery"]["validSampleCount"], 0)
+
     def test_explicit_since_overrides_diagnostics_start(self):
         raw = snapshot(
             recordings=[
@@ -196,6 +376,9 @@ class CaptureSoakTests(unittest.TestCase):
         report = capture_soak.build_report(snapshot())
         self.assertEqual(report["scope"]["kind"], "all_history")
         self.assertIsNone(report["scope"]["sinceUTC"])
+        stall = report["recorderSamples"]["recorderClockStall"]
+        self.assertEqual(stall["candidateCount"], 0)
+        self.assertIn("0 个候选也不代表连续录音通过", stall["interpretation"])
 
     def test_report_omits_ids_transcripts_and_event_details(self):
         secret_id = "12345678-1234-5678-9abc-1234567890ab"

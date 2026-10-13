@@ -62,7 +62,7 @@ Key 只在手机设置输入和 Keychain 保存，不进 UserDefaults、Watch �
 
 ## 全天模式与时间标记
 
-`Recording.mode` / `ClipEnvelope.mode` 区分 `quick` 和 `continuous`，旧数据缺字段时为 `quick`。连续录音仍使用同一录音器及 5 分钟保存/同步链路；界面只在 `AudioCapture.isRecording` 为真时显示正在录制，不根据开关偏好假定后台仍运行。
+`Recording.mode` / `ClipEnvelope.mode` 区分 `quick` 和 `continuous`，旧数据缺字段时为 `quick`。两种模式共用 `AudioCapture` 的 5 分钟保存/同步链路，每段创建新的 `AVAudioRecorder`；界面依据实际会话状态显示录音，不根据开关偏好假定后台仍运行。
 
 `RecordingMarker` 包含稳定 ID、当前音频分段内的秒偏移 `offset`、`note` / `journal` 意图。`mark(intent:)` 从当前录音器取得位置，store 写入成功才返回，UI 才显示“已标记”；不触发停止、切段或第二个录音器。标记数组随 envelope 同步，手机详情展示时间；`journal` 标记只是日记起点，尚未生成整理文本或 Obsidian 文件。旧数据缺少标记时按空数组解码。
 
@@ -71,6 +71,8 @@ Key 只在手机设置输入和 Keychain 保存，不进 UserDefaults、Watch �
 Watch 和手机都配置 `UIBackgroundModes = [audio]`；`WKBackgroundModes` 不能代替这个音频字段。权限说明同时涵盖连续记录与主动口述。录音开始仍由用户在前台发起，不使用虚假的 workout session 保活。
 
 显示时长来自 `AVAudioRecorder.currentTime`，不再在实际录音进度为零时使用墙钟递增。分段结束后先保存音频索引，再尝试开始下一段，最后调用上一段的 `onSaved` 做刷新和同步；用 defer 确保下一段启动失败时，上一段仍只通知一次。这个改动缩短交接路径，并不保证无缝，需测实际边界音频。
+
+每段启动前显式执行 `setActive(true)`，失败时保留已完成片段并报错。`RecordingProgressMonitor` 每段重置，以单调时间检查实际音频时间是否增长；执行中的观察超过 10 秒无进展时停止、保存并显示中断。回到前台也立即检查，但系统挂起期间无法保证按时检测，不把 `isRecording=true` 独立当作正在收音的证据。
 
 诊断默认关闭，仅显式 `SUIJI_DIAGNOSTICS_MINUTES=1...1440` 启用。60 秒采样、1600 条总上限、限时结束；结束诊断不停止用户录音。电池监测按启用前状态恢复。编码与原子写盘在串行后台队列处理，合并未写快照；进程突然结束可能损失最后诊断快照，不由此推定录音丢失。日志不含音频、转写或 Key，完整字段与测试方法见 [长录测试](LONG_RECORDING_TESTS.md)。
 
